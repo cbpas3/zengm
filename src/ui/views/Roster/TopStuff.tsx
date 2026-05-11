@@ -5,6 +5,7 @@ import { helpers } from "../../util/helpers.ts";
 import { toWorker } from "../../util/toWorker.ts";
 import InstructionsAndSortButtons from "./InstructionsAndSortButtons.tsx";
 import PlayThroughInjurySliders from "./PlayThroughInjuriesSliders.tsx";
+import GamePlanEditor from "./GamePlanEditor.tsx";
 import type { View } from "../../../common/types.ts";
 import { bySport } from "../../../common/sportFunctions.ts";
 import Note from "../Player/Note.tsx";
@@ -342,9 +343,14 @@ const TopStuff = ({
 								) : null}
 							</div>
 							{showTradingBlock ? (
-								<div>
-									<PlayThroughInjurySliders key={tid} t={t} />
-								</div>
+								<>
+									<div>
+										<PlayThroughInjurySliders key={tid} t={t} />
+									</div>
+									<div>
+										<GamePlanEditor key={`gp-${tid}`} t={t} />
+									</div>
+								</>
 							) : null}
 						</>
 					) : null}

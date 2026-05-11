@@ -1574,6 +1574,15 @@ export type Team = {
 	// [regular season, playoffs]
 	playThroughInjuries: [number, number];
 
+	// Optional because no upgrade — missing fields default to 50 (neutral)
+	gamePlan?: {
+		pace: number; // 0–100: 0 = grind it out, 100 = run-and-gun
+		threePointRate: number; // 0–100: 0 = never shoot 3s, 100 = live by the 3
+		postPlay: number; // 0–100: 0 = no post-ups, 100 = post-centric offense
+		rimAttack: number; // 0–100: 0 = settle for jumpers, 100 = always attack the rim
+		ballMovement: number; // 0–100: 0 = ISO/star-heavy, 100 = distribute evenly
+	};
+
 	// Optional because no upgrade
 	autoTicketPrice?: boolean;
 

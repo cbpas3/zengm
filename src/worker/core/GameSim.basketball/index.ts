@@ -102,6 +102,13 @@ type TeamGameSim = {
 		off: number;
 		reb: number;
 	};
+	gamePlan?: {
+		pace: number;
+		threePointRate: number;
+		postPlay: number;
+		rimAttack: number;
+		ballMovement: number;
+	};
 };
 
 type PossessionOutcome =
@@ -1597,7 +1604,14 @@ class GameSim extends GameSimBase {
 			}
 		}
 
-		const shooter = this.pickPlayer("usage", this.o, 1.25);
+		// Ball movement: 0 (ISO) → power 2.5 (star-heavy), 100 (distribute) → power 0.7 (flat)
+		// Default 1.25 maps to roughly ballMovement=35 on that scale
+		const offTeam = this.team[this.o]!;
+		const usagePower =
+			offTeam.gamePlan !== undefined
+				? 2.5 - (offTeam.gamePlan.ballMovement / 100) * 1.8
+				: 1.25;
+		const shooter = this.pickPlayer("usage", this.o, usagePower);
 
 		// Non-shooting foul?
 		if (
@@ -1852,7 +1866,12 @@ class GameSim extends GameSimBase {
 		} else if (
 			forceThreePointer ||
 			Math.random() <
-				0.67 * shootingThreePointerScaled2 * g.get("threePointTendencyFactor")
+				0.67 *
+					shootingThreePointerScaled2 *
+					// Game plan overrides the era factor: lerp 0→0.2, 50→1.35 (neutral), 100→2.5
+					(this.team[this.o]!.gamePlan !== undefined
+						? 0.2 + (this.team[this.o]!.gamePlan!.threePointRate / 100) * 2.3
+						: g.get("threePointTendencyFactor"))
 		) {
 			// Three pointer
 			type = "threePointer";
@@ -1867,18 +1886,22 @@ class GameSim extends GameSimBase {
 			}
 			probMake *= g.get("threePointAccuracyFactor");
 		} else {
+			const gp = this.team[this.o].gamePlan;
+
 			const r1 = 0.8 * Math.random() * p.compositeRating.shootingMidRange;
 			const r2 =
 				Math.random() *
 				(p.compositeRating.shootingAtRim +
 					this.synergyFactor *
-						(this.team[this.o].synergy.off - this.team[this.d].synergy.def)); // Synergy makes easy shots either more likely or less likely
+						(this.team[this.o].synergy.off - this.team[this.d].synergy.def)) * // Synergy makes easy shots either more likely or less likely
+				(gp !== undefined ? 0.5 + (gp.rimAttack / 100) * 1.5 : 1);
 
 			const r3 =
 				Math.random() *
 				(p.compositeRating.shootingLowPost +
 					this.synergyFactor *
-						(this.team[this.o].synergy.off - this.team[this.d].synergy.def)); // Synergy makes easy shots either more likely or less likely
+						(this.team[this.o].synergy.off - this.team[this.d].synergy.def)) * // Synergy makes easy shots either more likely or less likely
+				(gp !== undefined ? 0.3 + (gp.postPlay / 100) * 2.2 : 1);
 
 			if (r1 > r2 && r1 > r3) {
 				// Two point jumper

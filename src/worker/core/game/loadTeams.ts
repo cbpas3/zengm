@@ -102,6 +102,13 @@ export const processTeam = async (
 		tid: number;
 		playThroughInjuries: [number, number];
 		depth?: any;
+		gamePlan?: {
+			pace: number;
+			threePointRate: number;
+			postPlay: number;
+			rimAttack: number;
+			ballMovement: number;
+		};
 	},
 	teamSeason: {
 		won: number;
@@ -193,6 +200,7 @@ export const processTeam = async (
 		},
 		compositeRating,
 		depth: teamInput.depth,
+		gamePlan: teamInput.gamePlan,
 	};
 
 	const playThroughInjuries = actualPlayThroughInjuries[playoffs ? 1 : 0];
@@ -370,6 +378,11 @@ export const processTeam = async (
 
 		if (allStarGame) {
 			t.pace *= 1.15;
+		}
+
+		// Game plan pace modifier: 0=×0.85, 50=×1.0 (neutral), 100=×1.15
+		if (teamInput.gamePlan !== undefined) {
+			t.pace *= 0.85 + (teamInput.gamePlan.pace / 100) * 0.3;
 		}
 	}
 

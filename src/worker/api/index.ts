@@ -4105,6 +4105,27 @@ const updateOptions = async (
 	await toUI("realtimeUpdate", [["options"]]);
 };
 
+const updateGamePlan = async ({
+	tid,
+	gamePlan,
+}: {
+	tid: number;
+	gamePlan: {
+		pace: number;
+		threePointRate: number;
+		postPlay: number;
+		rimAttack: number;
+		ballMovement: number;
+	};
+}) => {
+	const t = await idb.cache.teams.get(tid);
+	if (t) {
+		t.gamePlan = gamePlan;
+		await idb.cache.teams.put(t);
+		await toUI("realtimeUpdate", [["playerMovement"]]);
+	}
+};
+
 const updatePlayThroughInjuries = async ({
 	tid,
 	value,
@@ -5261,6 +5282,7 @@ export default {
 		updateLeague,
 		updateMultiTeamMode,
 		updateOptions,
+		updateGamePlan,
 		updatePlayThroughInjuries,
 		updatePlayerWatch,
 		updatePlayersWatch,
