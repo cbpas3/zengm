@@ -65,17 +65,17 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 	},
 	spd: {
 		ageModifier: (age: number) => {
-			// Speed holds through prime, then declines
-			if (age <= 29) {
+			// Speed holds through prime (28-31), declines after
+			if (age <= 31) {
 				return 0;
 			}
 
-			if (age <= 33) {
-				return -1.5;
+			if (age <= 35) {
+				return -2;
 			}
 
-			if (age <= 37) {
-				return -3;
+			if (age <= 38) {
+				return -3.5;
 			}
 
 			if (age <= 40) {
@@ -88,21 +88,21 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 	},
 	jmp: {
 		ageModifier: (age: number) => {
-			// Jumping holds through prime, then declines
-			if (age <= 29) {
+			// Jumping holds through prime (28-31), declines after
+			if (age <= 31) {
 				return 0;
 			}
 
-			if (age <= 33) {
-				return -2;
+			if (age <= 35) {
+				return -2.5;
 			}
 
-			if (age <= 37) {
-				return -3.5;
+			if (age <= 38) {
+				return -4;
 			}
 
 			if (age <= 40) {
-				return -5;
+				return -6;
 			}
 
 			return -10;
@@ -115,7 +115,8 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 				return random.uniform(0, 9);
 			}
 
-			if (age <= 30) {
+			// Endurance holds through prime (24-31), declines after
+			if (age <= 31) {
 				return 0;
 			}
 
@@ -166,11 +167,13 @@ const calcBaseChange = (age: number, coachingLevel: number): number => {
 	let val: number;
 
 	if (age <= 21) {
-		val = 2;
+		val = 4;
+	} else if (age <= 23) {
+		val = 3;
 	} else if (age <= 25) {
-		val = 1.5;
+		val = 2.5;
 	} else if (age <= 27) {
-		val = 1;
+		val = 1.5;
 	} else if (age <= 31) {
 		// Prime plateau — base is neutral, individual rating formulas determine direction
 		val = 0;
@@ -184,14 +187,25 @@ const calcBaseChange = (age: number, coachingLevel: number): number => {
 		val = -6;
 	}
 
-	// Noise — tighter during prime so variance doesn't randomly derail a player's best years
-	if (age <= 23) {
-		val += helpers.bound(random.realGauss(0, 5), -4, 20);
+	// Noise bounds are set so young players can never have a full decline year from noise alone.
+	// The negative bound never exceeds the base value, ensuring the floor is 0 or positive.
+	if (age <= 21) {
+		// base 4 — worst case: 4 - 3 = 1 (always positive)
+		val += helpers.bound(random.realGauss(0, 5), -3, 20);
+	} else if (age <= 23) {
+		// base 3 — worst case: 3 - 2.5 = 0.5
+		val += helpers.bound(random.realGauss(0, 4), -2.5, 15);
+	} else if (age <= 25) {
+		// base 2.5 — worst case: 2.5 - 2 = 0.5
+		val += helpers.bound(random.realGauss(0, 3), -2, 10);
 	} else if (age <= 27) {
-		val += helpers.bound(random.realGauss(0, 4), -3, 8);
+		// base 1.5 — worst case: 1.5 - 1.5 = 0 (plateau, not decline)
+		val += helpers.bound(random.realGauss(0, 3), -1.5, 6);
 	} else if (age <= 31) {
+		// Prime — tight noise, occasional slight dip acceptable
 		val += helpers.bound(random.realGauss(0, 2), -1, 3);
 	} else {
+		// Decline phase — moderate variance
 		val += helpers.bound(random.realGauss(0, 3), -2, 2);
 	}
 
