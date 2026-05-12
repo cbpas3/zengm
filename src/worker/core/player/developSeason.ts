@@ -76,6 +76,15 @@ const developSeason = async (
 
 					if (realRatings) {
 						for (const key of RATINGS) {
+							// Focus and mentor keys are exempt — they follow coaching/sim path
+							const isFocusKey =
+								devOptions?.devFocus &&
+								DEV_FOCUS_RATINGS[devOptions.devFocus].includes(key as string);
+							const isMentorKey = devOptions?.mentorBoostKeys?.includes(
+								key as string,
+							);
+							if (isFocusKey || isMentorKey) continue;
+
 							(ratings as any)[key] = limitRating(
 								realPlayerDeterminism * (realRatings as any)[key] +
 									(1 - realPlayerDeterminism) * (ratings as any)[key],
