@@ -204,11 +204,6 @@ const Roster = ({
 					</>
 				),
 			},
-			Dev: {
-				title: "Dev",
-				noSearch: true,
-				sortSequence: [],
-			},
 			Mood: {
 				titleReact: (
 					<>

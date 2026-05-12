@@ -3387,6 +3387,11 @@ const cols: {
 		noSearch: true,
 		sortSequence: [],
 	},
+	Dev: {
+		desc: "Development Controls",
+		noSearch: true,
+		sortSequence: [],
+	},
 	PTS: {
 		desc: "Points",
 		sortSequence: ["desc", "asc"],
