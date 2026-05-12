@@ -5,7 +5,6 @@ import type {
 	RatingKey,
 } from "../../../common/types.basketball.ts";
 import { coachingEffect } from "../../../common/budgetLevels.ts";
-import type { DevFocusType } from "../../../common/types.ts";
 
 type RatingFormula = {
 	ageModifier: (age: number) => number;
@@ -61,7 +60,7 @@ const iqFormula: RatingFormula = {
 const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 	stre: {
 		ageModifier: () => 0,
-		changeLimits: () => [-Infinity, Infinity],
+		changeLimits: () => [-Infinity, 12],
 	},
 	spd: {
 		ageModifier: (age: number) => {
@@ -214,19 +213,10 @@ const calcBaseChange = (age: number, coachingLevel: number): number => {
 	return val;
 };
 
-const DEV_FOCUS_RATINGS: Record<DevFocusType, string[]> = {
-	scoring: ["ins", "dnk", "ft", "fg", "tp"],
-	defense: ["diq", "stre", "spd", "jmp"],
-	athleticism: ["stre", "spd", "jmp", "endu"],
-	playmaking: ["oiq", "drb", "pss", "reb"],
-};
-
 const developSeason = (
 	ratings: PlayerRatings,
 	age: number,
 	coachingLevel: number,
-	devFocus?: DevFocusType,
-	mentorBoostKeys?: string[],
 ) => {
 	// In young players, height can sometimes increase
 	if (age <= 21) {
@@ -247,14 +237,10 @@ const developSeason = (
 		const ageModifier = ratingsFormulas[key].ageModifier(age);
 		const changeLimits = ratingsFormulas[key].changeLimits(age);
 
-		let change = baseChange + ageModifier;
-		if (devFocus && DEV_FOCUS_RATINGS[devFocus].includes(key)) change *= 1.4;
-		if (mentorBoostKeys?.includes(key)) change *= 1.2;
-
 		ratings[key] = limitRating(
 			ratings[key] +
 				helpers.bound(
-					change * random.uniform(0.4, 1.4),
+					(baseChange + ageModifier) * random.uniform(0.4, 1.4),
 					changeLimits[0],
 					changeLimits[1],
 				),

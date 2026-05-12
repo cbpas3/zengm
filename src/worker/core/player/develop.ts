@@ -141,6 +141,11 @@ const develop = async (
 		}
 
 		if (!ratings.locked) {
+			// Clear mentorship once the player ages out — persisted when caller saves p
+			if (p.mentorPid !== undefined && age > 23) {
+				p.mentorPid = undefined;
+			}
+
 			let mentorBoostKeys: string[] | undefined;
 			if (p.mentorPid !== undefined) {
 				const mentor = await idb.cache.players.get(p.mentorPid);

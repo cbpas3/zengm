@@ -4284,17 +4284,25 @@ const updatePlayerDevelopment = async ({
 		if (mentorPid === null) {
 			p.mentorPid = undefined;
 		} else {
-			const mentor = await idb.cache.players.get(mentorPid);
-			if (mentor && mentor.tid === p.tid) {
-				const teammates = await idb.cache.players.indexGetAll(
-					"playersByTid",
-					p.tid,
-				);
-				const taken = teammates.some(
-					(op) => op.pid !== pid && op.mentorPid === mentorPid,
-				);
-				if (!taken) {
-					p.mentorPid = mentorPid;
+			// Server-side guards: no self-mentor, mentee must be ≤23
+			const playerAge = p.ratings.at(-1)!.season - p.born.year;
+			if (mentorPid !== pid && playerAge <= 23) {
+				const mentor = await idb.cache.players.get(mentorPid);
+				if (mentor && mentor.tid === p.tid) {
+					// Only block if the existing holder is a valid active mentee (age ≤23)
+					// — avoids stale references from aged-out players locking the slot
+					const teammates = await idb.cache.players.indexGetAll(
+						"playersByTid",
+						p.tid,
+					);
+					const taken = teammates.some((op) => {
+						if (op.pid === pid || op.mentorPid !== mentorPid) return false;
+						const opAge = (op.ratings.at(-1)?.season ?? 0) - op.born.year;
+						return opAge <= 23;
+					});
+					if (!taken) {
+						p.mentorPid = mentorPid;
+					}
 				}
 			}
 		}

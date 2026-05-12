@@ -19,7 +19,7 @@ const PlayerDevelopmentControls = ({
 	players: Player[];
 }) => {
 	const availableMentors = players
-		.filter((m) => m.pid !== p.pid && m.stats.age >= 28)
+		.filter((m) => m.pid !== p.pid && m.age >= 28)
 		.sort((a, b) => b.ratings.ovr - a.ratings.ovr);
 
 	const currentMentor =
@@ -53,9 +53,10 @@ const PlayerDevelopmentControls = ({
 				className="form-select form-select-sm"
 				value={p.devFocus ?? ""}
 				onChange={async (e) => {
+					const val = e.target.value;
 					await toWorker("main", "updatePlayerDevelopment", {
 						pid: p.pid,
-						devFocus: (e.target.value as DevFocusType) || null,
+						devFocus: val === "" ? null : (val as DevFocusType),
 					});
 				}}
 				title="Development focus"
@@ -68,7 +69,7 @@ const PlayerDevelopmentControls = ({
 				))}
 			</select>
 
-			{p.stats.age <= 23 ? (
+			{p.age <= 23 ? (
 				<select
 					className="form-select form-select-sm"
 					value={p.mentorPid ?? ""}
