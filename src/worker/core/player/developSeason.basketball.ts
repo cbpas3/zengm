@@ -14,20 +14,16 @@ type RatingFormula = {
 
 const shootingFormula: RatingFormula = {
 	ageModifier: (age: number) => {
-		// Reverse most of the age-related decline in calcBaseChange
-		if (age <= 27) {
+		// Skills age gracefully — offset the base decline that starts at 32+
+		if (age <= 31) {
 			return 0;
 		}
 
-		if (age <= 29) {
+		if (age <= 34) {
 			return 0.5;
 		}
 
-		if (age <= 31) {
-			return 1.5;
-		}
-
-		return 2;
+		return 1.5;
 	},
 	changeLimits: () => [-3, 13],
 };
@@ -41,20 +37,16 @@ const iqFormula: RatingFormula = {
 			return 3;
 		}
 
-		// Reverse most of the age-related decline in calcBaseChange
-		if (age <= 27) {
+		// IQ/skill holds through prime, then offset the base decline
+		if (age <= 31) {
 			return 0;
 		}
 
-		if (age <= 29) {
+		if (age <= 34) {
 			return 0.5;
 		}
 
-		if (age <= 31) {
-			return 1.5;
-		}
-
-		return 2;
+		return 1.5;
 	},
 	changeLimits: (age) => {
 		if (age >= 24) {
@@ -73,20 +65,21 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 	},
 	spd: {
 		ageModifier: (age: number) => {
-			if (age <= 27) {
+			// Speed holds through prime, then declines
+			if (age <= 29) {
 				return 0;
 			}
 
-			if (age <= 30) {
-				return -2;
+			if (age <= 33) {
+				return -1.5;
 			}
 
-			if (age <= 35) {
+			if (age <= 37) {
 				return -3;
 			}
 
 			if (age <= 40) {
-				return -4;
+				return -5;
 			}
 
 			return -8;
@@ -95,16 +88,17 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 	},
 	jmp: {
 		ageModifier: (age: number) => {
-			if (age <= 26) {
+			// Jumping holds through prime, then declines
+			if (age <= 29) {
 				return 0;
 			}
 
-			if (age <= 30) {
-				return -3;
+			if (age <= 33) {
+				return -2;
 			}
 
-			if (age <= 35) {
-				return -4;
+			if (age <= 37) {
+				return -3.5;
 			}
 
 			if (age <= 40) {
@@ -139,12 +133,12 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 	},
 	dnk: {
 		ageModifier: (age: number) => {
-			// Like shootingForumla, except for old players
-			if (age <= 27) {
+			// Dunking tracks athleticism more than shooting — no offset bonus
+			if (age <= 29) {
 				return 0;
 			}
 
-			return 0.5;
+			return -0.5;
 		},
 		changeLimits: () => [-3, 13],
 	},
@@ -174,30 +168,31 @@ const calcBaseChange = (age: number, coachingLevel: number): number => {
 	if (age <= 21) {
 		val = 2;
 	} else if (age <= 25) {
-		val = 1;
+		val = 1.5;
 	} else if (age <= 27) {
-		val = 0;
-	} else if (age <= 29) {
-		val = -1;
+		val = 1;
 	} else if (age <= 31) {
-		val = -2;
+		// Prime plateau — base is neutral, individual rating formulas determine direction
+		val = 0;
 	} else if (age <= 34) {
+		val = -1.5;
+	} else if (age <= 37) {
 		val = -3;
 	} else if (age <= 40) {
-		val = -4;
-	} else if (age <= 43) {
-		val = -5;
+		val = -4.5;
 	} else {
 		val = -6;
 	}
 
-	// Noise
+	// Noise — tighter during prime so variance doesn't randomly derail a player's best years
 	if (age <= 23) {
 		val += helpers.bound(random.realGauss(0, 5), -4, 20);
-	} else if (age <= 25) {
-		val += helpers.bound(random.realGauss(0, 5), -4, 10);
+	} else if (age <= 27) {
+		val += helpers.bound(random.realGauss(0, 4), -3, 8);
+	} else if (age <= 31) {
+		val += helpers.bound(random.realGauss(0, 2), -1, 3);
 	} else {
-		val += helpers.bound(random.realGauss(0, 3), -2, 4);
+		val += helpers.bound(random.realGauss(0, 3), -2, 2);
 	}
 
 	val *= 1 + (val > 0 ? 1 : -1) * coachingEffect(coachingLevel);
