@@ -88,6 +88,7 @@ import type {
 	RealPlayerPhotos,
 	View,
 	NonEmptyArray,
+	DevFocusType,
 } from "../../common/types.ts";
 import {
 	addSimpleAndTeamAwardsToAwardsByPlayer,
@@ -4256,6 +4257,53 @@ const updatePlayersWatch = async ({
 	]);
 };
 
+const updatePlayerDevelopment = async ({
+	pid,
+	devOverride,
+	devFocus,
+	mentorPid,
+}: {
+	pid: number;
+	devOverride?: boolean;
+	devFocus?: DevFocusType | null;
+	mentorPid?: number | null;
+}) => {
+	const p = await idb.cache.players.get(pid);
+	if (!p || p.tid !== g.get("userTid")) {
+		return;
+	}
+
+	if (devOverride !== undefined) {
+		p.devOverride = devOverride || undefined;
+	}
+	if (devFocus !== undefined) {
+		p.devFocus = devFocus ?? undefined;
+	}
+
+	if (mentorPid !== undefined) {
+		if (mentorPid === null) {
+			p.mentorPid = undefined;
+		} else {
+			const mentor = await idb.cache.players.get(mentorPid);
+			if (mentor && mentor.tid === p.tid) {
+				const teammates = await idb.cache.players.indexGetAll(
+					"playersByTid",
+					p.tid,
+				);
+				const taken = teammates.some(
+					(op) => op.pid !== pid && op.mentorPid === mentorPid,
+				);
+				if (!taken) {
+					p.mentorPid = mentorPid;
+				}
+			}
+		}
+	}
+
+	await idb.cache.players.put(p);
+	await toUI("realtimeUpdate", [["playerMovement"]]);
+};
+
 const updatePlayingTime = async ({
 	pid,
 	ptModifier,
@@ -5283,6 +5331,7 @@ export default {
 		updateMultiTeamMode,
 		updateOptions,
 		updateGamePlan,
+		updatePlayerDevelopment,
 		updatePlayThroughInjuries,
 		updatePlayerWatch,
 		updatePlayersWatch,

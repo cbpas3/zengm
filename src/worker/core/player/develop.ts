@@ -8,7 +8,11 @@ import ovr from "./ovr.ts";
 import pos from "./pos.ts";
 import skills from "./skills.ts";
 import { g, helpers, random } from "../../util/index.ts";
-import type { MinimalPlayerRatings } from "../../../common/types.ts";
+import type {
+	DevFocusType,
+	MinimalPlayerRatings,
+} from "../../../common/types.ts";
+import { idb } from "../../db/index.ts";
 import genWeight from "./genWeight.ts";
 import potEstimator from "./potEstimator.ts";
 import { TOO_MANY_TEAMS_TOO_SLOW } from "../season/getInitialNumGamesConfDivSettings.ts";
@@ -118,6 +122,9 @@ const develop = async (
 		tid: number;
 		weight: number;
 		srID?: string;
+		devOverride?: boolean;
+		devFocus?: DevFocusType;
+		mentorPid?: number;
 	},
 	years: number = 1,
 	newPlayer: boolean = false,
@@ -134,7 +141,38 @@ const develop = async (
 		}
 
 		if (!ratings.locked) {
-			await developSeason(ratings, age, p.srID, coachingLevel, false);
+			let mentorBoostKeys: string[] | undefined;
+			if (p.mentorPid !== undefined) {
+				const mentor = await idb.cache.players.get(p.mentorPid);
+				if (mentor && mentor.tid === p.tid) {
+					const lastRatings = mentor.ratings.at(-1)!;
+					const skillKeys = [
+						"ins",
+						"dnk",
+						"ft",
+						"fg",
+						"tp",
+						"oiq",
+						"diq",
+						"drb",
+						"pss",
+						"reb",
+						"stre",
+						"spd",
+						"jmp",
+						"endu",
+					];
+					mentorBoostKeys = [...skillKeys]
+						.sort((a, b) => (lastRatings as any)[b] - (lastRatings as any)[a])
+						.slice(0, 4);
+				}
+			}
+
+			await developSeason(ratings, age, p.srID, coachingLevel, false, {
+				devOverride: p.devOverride,
+				devFocus: p.devFocus,
+				mentorBoostKeys,
+			});
 		}
 	}
 

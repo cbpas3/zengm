@@ -2,7 +2,10 @@ import developSeasonBaseball from "./developSeason.baseball.ts";
 import developSeasonBasketball from "./developSeason.basketball.ts";
 import developSeasonFootball from "./developSeason.football.ts";
 import developSeasonHockey from "./developSeason.hockey.ts";
-import type { MinimalPlayerRatings } from "../../../common/types.ts";
+import type {
+	DevFocusType,
+	MinimalPlayerRatings,
+} from "../../../common/types.ts";
 import { g, helpers } from "../../util/index.ts";
 import { RATINGS } from "../../../common/constants.ts";
 import loadDataBasketball from "../realRosters/loadData.basketball.ts";
@@ -13,21 +16,38 @@ import { bySport, isSport } from "../../../common/sportFunctions.ts";
 // Cache for performance
 let groupedRatings: Record<string, Ratings> | undefined;
 
+type DevOptions = {
+	devOverride?: boolean;
+	devFocus?: DevFocusType;
+	mentorBoostKeys?: string[];
+};
+
 const developSeason = async (
 	ratings: MinimalPlayerRatings,
 	age: number,
 	srID: string | undefined,
 	coachingLevel: number,
 	forPot: boolean,
+	devOptions?: DevOptions,
 ) => {
 	bySport({
 		baseball: developSeasonBaseball(ratings as any, age, coachingLevel),
-		basketball: developSeasonBasketball(ratings as any, age, coachingLevel),
+		basketball: developSeasonBasketball(
+			ratings as any,
+			age,
+			coachingLevel,
+			devOptions?.devFocus,
+			devOptions?.mentorBoostKeys,
+		),
 		football: developSeasonFootball(ratings as any, age, coachingLevel),
 		hockey: developSeasonHockey(ratings as any, age, coachingLevel),
 	});
 
 	if (!isSport("basketball") || !Object.hasOwn(g, "realPlayerDeterminism")) {
+		return;
+	}
+
+	if (devOptions?.devOverride) {
 		return;
 	}
 

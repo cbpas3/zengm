@@ -1133,6 +1133,8 @@ export type PlayerStats = any;
 
 export type RelativeType = "brother" | "father" | "son";
 
+export type DevFocusType = "scoring" | "defense" | "athleticism" | "playmaking";
+
 export type Relative = {
 	type: RelativeType;
 	pid: number;
@@ -1211,6 +1213,9 @@ export type PlayerWithoutKey<PlayerRatings = any> = {
 	pid?: number;
 	pos?: string; // Only in players from custom league files
 	ptModifier: number;
+	devOverride?: boolean;
+	devFocus?: DevFocusType;
+	mentorPid?: number;
 	ratings: NonEmptyArray<PlayerRatings>;
 	real?: boolean;
 	relatives: Relative[];

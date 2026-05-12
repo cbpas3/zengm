@@ -10,6 +10,7 @@ import { toWorker } from "../../util/toWorker.ts";
 import { getCols } from "../../../common/getCols.ts";
 import { useLocalPartial } from "../../util/local.ts";
 import PlayingTime, { ptStyles } from "./PlayingTime.tsx";
+import PlayerDevelopmentControls from "./PlayerDevelopmentControls.tsx";
 import TopStuff from "./TopStuff.tsx";
 import type {
 	GameAttributesLeague,
@@ -165,7 +166,7 @@ const Roster = ({
 			"stat:yearsWithTeam",
 			"Country",
 			...stats.map((stat) => `stat:${stat}`),
-			...(editable ? ["PT"] : []),
+			...(editable ? ["PT", "Dev"] : []),
 			...(showMood ? ["Mood"] : []),
 			...(showRelease ? ["Release"] : []),
 			...(showTradeFor || showTradingBlock ? ["Trade"] : []),
@@ -202,6 +203,11 @@ const Roster = ({
 						</HelpPopover>
 					</>
 				),
+			},
+			Dev: {
+				title: "Dev",
+				noSearch: true,
+				sortSequence: [],
 			},
 			Mood: {
 				titleReact: (
@@ -324,7 +330,12 @@ const Roster = ({
 					searchValue: p.born.loc,
 				},
 				...stats.map((stat) => helpers.roundStat(p.stats[stat], stat)),
-				...(editable ? [<PlayingTime p={p} userTid={userTid} />] : []),
+				...(editable
+					? [
+							<PlayingTime p={p} userTid={userTid} />,
+							<PlayerDevelopmentControls p={p} players={players} />,
+						]
+					: []),
 				...(showMood
 					? [
 							wrappedMood({
