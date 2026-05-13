@@ -42,6 +42,7 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 
 		return {
 			fullNames,
+			geminiApiKey: props.geminiApiKey ?? "",
 			phaseChangeRedirects: props.phaseChangeRedirects,
 			realPlayerPhotos: props.realPlayerPhotos,
 			realTeamInfo: props.realTeamInfo,
@@ -79,6 +80,7 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 		try {
 			await toWorker("main", "updateOptions", {
 				fullNames: state.fullNames === "always",
+				geminiApiKey: state.geminiApiKey || undefined,
 				phaseChangeRedirects: state.phaseChangeRedirects,
 				realPlayerPhotos: state.realPlayerPhotos,
 				realTeamInfo: state.realTeamInfo,
@@ -253,6 +255,43 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 
 				{isSport("basketball") ? (
 					<>
+						<h2>AI Trade Realism</h2>
+						<div className="row mb-3">
+							<div className="col-sm-6">
+								<label className="form-label" htmlFor="options-gemini-api-key">
+									Gemini API Key{" "}
+									<HelpPopover title="AI Trade Realism">
+										<p>
+											When set, trade proposals are evaluated by Google Gemini
+											Flash before being accepted. Trades that wouldn't happen
+											in real life (wrong player reputation, bad team fit, etc.)
+											are rejected with a reason. Only affects notable trades
+											(players rated 70+ OVR).
+										</p>
+										<p>
+											Get a free key at{" "}
+											<a
+												href="https://aistudio.google.com/apikey"
+												rel="noopener noreferrer"
+												target="_blank"
+											>
+												Google AI Studio
+											</a>
+											.
+										</p>
+									</HelpPopover>
+								</label>
+								<input
+									type="password"
+									id="options-gemini-api-key"
+									className="form-control"
+									placeholder="AIza..."
+									value={state.geminiApiKey}
+									onChange={handleChange("geminiApiKey") as any}
+								/>
+							</div>
+						</div>
+
 						<h2>Team and Player Data for "Real Players" Leagues</h2>
 						<RealData
 							handleChange={handleChange}

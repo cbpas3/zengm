@@ -162,6 +162,7 @@ import { getNumPlayersTradedAwayNormalizedAll } from "../core/player/getNumPlaye
 import { getAdjustedTicketPrice } from "../../common/getAdjustedTicketPrice.ts";
 import { gameAttributesArrayToObject } from "../../common/gameAttributesArrayToObject.ts";
 import { bySport, isSport } from "../../common/sportFunctions.ts";
+import { generateTradingBlockOffers } from "../util/gemini.ts";
 
 const acceptContractNegotiation = async ({
 	pid,
@@ -2130,7 +2131,10 @@ const getOffers = async (
 	return offers;
 };
 
-export const augmentOffers = async (offers: TradeTeams[]) => {
+export const augmentOffers = async (
+	offers: TradeTeams[],
+	reasonings?: Map<number, string>,
+) => {
 	if (offers.length === 0) {
 		return [];
 	}
@@ -2151,7 +2155,7 @@ export const augmentOffers = async (offers: TradeTeams[]) => {
 
 	// Take the pids and dpids in each offer and get the info needed to display the offer
 	return Promise.all(
-		offers.map(async (offerRaw) => {
+		offers.map(async (offerRaw, i) => {
 			const tid = offerRaw[1].tid;
 			const t = teamsByTid[tid];
 			if (!t) {
@@ -2226,6 +2230,7 @@ export const augmentOffers = async (offers: TradeTeams[]) => {
 				picksUser: await formatPicks(g.get("userTid"), offerRaw[0].dpids),
 				playersUser: await formatPlayers(g.get("userTid"), offerRaw[0].pids),
 				summary: await getSummary(offerRaw),
+				reasoning: reasonings?.get(i) ?? undefined,
 			};
 		}),
 	);
@@ -2260,43 +2265,41 @@ const getTradingBlockOffers = async ({
 	dpids: number[];
 	lookingFor: LookingForState;
 }) => {
-	let offers = await getOffers(pids, dpids, toConciseLookingFor(lookingFor));
+	// Try Gemini-powered offer generation first
+	const geminiOffers = await generateTradingBlockOffers(pids, dpids);
 
-	let saveLookingFor;
-	let positionAndNotDraftPicks = false;
-	let draftPicksAndNothingElse = lookingFor.assets.draftPicks;
-	for (const type of helpers.keys(lookingFor)) {
-		const obj = lookingFor[type];
-		for (const [key, value] of Object.entries(obj)) {
-			if (value) {
-				saveLookingFor = true;
+	let offers: TradeTeams[];
+	let reasonings: Map<number, string> | undefined;
 
-				if (!lookingFor.assets.draftPicks && type === "positions") {
-					positionAndNotDraftPicks = true;
-				}
+	if (geminiOffers && geminiOffers.length > 0) {
+		offers = geminiOffers.map((o) => o.teams);
+		reasonings = new Map(geminiOffers.map((o, i) => [i, o.reasoning]));
+	} else {
+		// Fallback to existing value-matching logic
+		offers = await getOffers(pids, dpids, toConciseLookingFor(lookingFor));
 
-				if (
-					draftPicksAndNothingElse &&
-					(type !== "assets" || key !== "draftPicks")
-				) {
-					draftPicksAndNothingElse = false;
+		let positionAndNotDraftPicks = false;
+		let draftPicksAndNothingElse = lookingFor.assets.draftPicks;
+		for (const type of helpers.keys(lookingFor)) {
+			const obj = lookingFor[type];
+			for (const [, value] of Object.entries(obj)) {
+				if (value) {
+					if (!lookingFor.assets.draftPicks && type === "positions") {
+						positionAndNotDraftPicks = true;
+					}
+					if (draftPicksAndNothingElse && type !== "assets") {
+						draftPicksAndNothingElse = false;
+					}
 				}
 			}
 		}
-	}
 
-	// If we're looking for a position and not draft picks, only keep offers that include that position
-	if (positionAndNotDraftPicks) {
-		offers = offers.filter((offer) => {
-			return offer[1].pids.length > 0;
-		});
-	}
-
-	// If we're looking for draft picks and nothing else, only keep offers that include picks
-	if (draftPicksAndNothingElse) {
-		offers = offers.filter((offer) => {
-			return offer[1].dpids.length > 0;
-		});
+		if (positionAndNotDraftPicks) {
+			offers = offers.filter((offer) => offer[1].pids.length > 0);
+		}
+		if (draftPicksAndNothingElse) {
+			offers = offers.filter((offer) => offer[1].dpids.length > 0);
+		}
 	}
 
 	const savedTradingBlock = {
@@ -2304,18 +2307,16 @@ const getTradingBlockOffers = async ({
 		dpids,
 		pids,
 		tid: g.get("userTid"),
-		offers: offers.map((offer) => {
-			return {
-				dpids: offer[1].dpids,
-				pids: offer[1].pids,
-				tid: offer[1].tid,
-			};
-		}),
-		lookingFor: saveLookingFor ? lookingFor : undefined,
+		offers: offers.map((offer) => ({
+			dpids: offer[1].dpids,
+			pids: offer[1].pids,
+			tid: offer[1].tid,
+		})),
+		lookingFor: undefined,
 	};
 	await idb.cache.savedTradingBlock.put(savedTradingBlock);
 
-	return augmentOffers(offers);
+	return augmentOffers(offers, reasonings);
 };
 
 const ping = async () => {
@@ -4094,6 +4095,7 @@ const updateOptions = async (
 		{
 			units: options.units,
 			fullNames: options.fullNames,
+			geminiApiKey: options.geminiApiKey || undefined,
 			phaseChangeRedirects: options.phaseChangeRedirects,
 		},
 		"options",

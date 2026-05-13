@@ -963,6 +963,7 @@ export type Option = {
 
 export type Options = {
 	fullNames?: boolean;
+	geminiApiKey?: string;
 	phaseChangeRedirects: Phase[];
 	units?: "metric" | "us";
 };

@@ -153,6 +153,7 @@ export const Offer = (props: OfferProps) => {
 		payroll,
 		pids,
 		pidsUser,
+		reasoning,
 		salaryCap,
 		salaryCapType,
 		strategy,
@@ -204,6 +205,14 @@ export const Offer = (props: OfferProps) => {
 					/>
 				) : null}
 			</div>
+			{reasoning ? (
+				<p
+					className="fst-italic text-muted mb-2"
+					style={{ fontSize: "0.9rem", maxWidth: 600 }}
+				>
+					"{reasoning}"
+				</p>
+			) : null}
 			<div
 				className="mb-3 d-sm-flex justify-content-between"
 				style={{ maxWidth: 500 }}
