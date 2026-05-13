@@ -207,10 +207,11 @@ export const Offer = (props: OfferProps) => {
 			</div>
 			{reasoning ? (
 				<p
-					className="fst-italic text-muted mb-2"
+					className="text-muted mb-2"
 					style={{ fontSize: "0.9rem", maxWidth: 600 }}
 				>
-					"{reasoning}"
+					<span className="fw-semibold">GM's take: </span>
+					<span className="fst-italic">"{reasoning}"</span>
 				</p>
 			) : null}
 			<div
@@ -524,6 +525,7 @@ const TradingBlock = ({
 		asking: boolean;
 		offers: OfferType[];
 		noOffers: boolean;
+		usedFallback: boolean;
 		pids: number[];
 		dpids: number[];
 	}>(() => {
@@ -549,6 +551,7 @@ const TradingBlock = ({
 			asking: false,
 			offers: savedTradingBlock?.offers ?? [],
 			noOffers: false, // Only set true in response to a click
+			usedFallback: false,
 			pids,
 			dpids,
 		};
@@ -583,7 +586,7 @@ const TradingBlock = ({
 			asking: true,
 		}));
 
-		const offers = await toWorker("main", "getTradingBlockOffers", {
+		const result = await toWorker("main", "getTradingBlockOffers", {
 			pids: state.pids,
 			dpids: state.dpids,
 			lookingFor: lookingForState,
@@ -592,8 +595,9 @@ const TradingBlock = ({
 		setState((prevState) => ({
 			...prevState,
 			asking: false,
-			noOffers: offers.length === 0,
-			offers,
+			noOffers: result.offers.length === 0,
+			offers: result.offers,
+			usedFallback: result.usedFallback,
 		}));
 	};
 
@@ -805,7 +809,7 @@ const TradingBlock = ({
 					variant="primary"
 					className="me-2"
 				>
-					Ask for trade proposals
+					{state.asking ? "Asking GMs…" : "Ask for trade proposals"}
 				</ActionButton>
 				<SplitButton
 					variant="secondary"
@@ -829,6 +833,12 @@ const TradingBlock = ({
 			{state.noOffers ? (
 				<div className="alert alert-danger mb-0 mt-3 d-inline-block">
 					No team made an offer.
+				</div>
+			) : null}
+
+			{state.usedFallback && state.offers.length > 0 ? (
+				<div className="alert alert-warning mb-0 mt-3 d-inline-block">
+					AI unavailable — showing standard offers.
 				</div>
 			) : null}
 
@@ -869,6 +879,14 @@ const TradingBlock = ({
 													willing={offer.willing}
 												/>
 											</div>
+										) : null}
+										{offer.reasoning ? (
+											<p
+												className="fst-italic text-muted mb-0 mt-2"
+												style={{ fontSize: "0.85rem" }}
+											>
+												"{offer.reasoning}"
+											</p>
 										) : null}
 									</>
 								),

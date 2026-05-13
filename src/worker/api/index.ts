@@ -2270,11 +2270,13 @@ const getTradingBlockOffers = async ({
 
 	let offers: TradeTeams[];
 	let reasonings: Map<number, string> | undefined;
+	let usedFallback = false;
 
 	if (geminiOffers && geminiOffers.length > 0) {
 		offers = geminiOffers.map((o) => o.teams);
 		reasonings = new Map(geminiOffers.map((o, i) => [i, o.reasoning]));
 	} else {
+		usedFallback = true;
 		// Fallback to existing value-matching logic
 		offers = await getOffers(pids, dpids, toConciseLookingFor(lookingFor));
 
@@ -2316,7 +2318,8 @@ const getTradingBlockOffers = async ({
 	};
 	await idb.cache.savedTradingBlock.put(savedTradingBlock);
 
-	return augmentOffers(offers, reasonings);
+	const augmented = await augmentOffers(offers, reasonings);
+	return { offers: augmented, usedFallback };
 };
 
 const ping = async () => {
