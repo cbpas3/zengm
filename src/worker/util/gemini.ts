@@ -77,7 +77,7 @@ Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words expl
 
 	try {
 		const response = await fetch(
-			`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+			`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
 			{
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -123,7 +123,7 @@ const callGemini = async (
 ): Promise<string | null> => {
 	try {
 		const response = await fetch(
-			`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+			`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
 			{
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
