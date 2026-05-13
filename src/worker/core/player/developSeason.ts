@@ -6,7 +6,7 @@ import type {
 	DevFocusType,
 	MinimalPlayerRatings,
 } from "../../../common/types.ts";
-import { g, helpers } from "../../util/index.ts";
+import { g, helpers, random } from "../../util/index.ts";
 import { RATINGS } from "../../../common/constants.ts";
 import loadDataBasketball from "../realRosters/loadData.basketball.ts";
 import type { Ratings } from "../realRosters/loadData.basketball.ts";
@@ -23,10 +23,14 @@ type DevOptions = {
 };
 
 const DEV_FOCUS_RATINGS: Record<DevFocusType, string[]> = {
-	scoring: ["ins", "dnk", "ft", "fg", "tp"],
-	defense: ["diq", "stre", "spd", "jmp"],
-	athleticism: ["stre", "spd", "jmp", "endu"],
-	playmaking: ["oiq", "drb", "pss", "reb"],
+	sharpshooter: ["tp", "fg", "ft"],
+	slasher: ["dnk", "spd", "jmp"],
+	postScorer: ["ins", "stre", "reb"],
+	playmaker: ["pss", "drb", "oiq"],
+	threeAndD: ["tp", "diq", "spd"],
+	lockdown: ["diq", "stre", "spd", "jmp"],
+	athletic: ["spd", "jmp", "endu", "stre"],
+	floorGeneral: ["oiq", "pss", "drb"],
 };
 
 const developSeason = async (
@@ -37,6 +41,16 @@ const developSeason = async (
 	forPot: boolean,
 	devOptions?: DevOptions,
 ) => {
+	// Snapshot focus ratings before step 1 so we can enforce a no-regression floor in step 3
+	const focusKeys =
+		!forPot && devOptions?.devFocus
+			? DEV_FOCUS_RATINGS[devOptions.devFocus]
+			: [];
+	const ratingSnapshot: Record<string, number> = {};
+	for (const key of focusKeys) {
+		ratingSnapshot[key] = (ratings as any)[key];
+	}
+
 	// Step 1: Sport-specific development (no bonus params — bonuses applied after RPD below)
 	bySport({
 		baseball: developSeasonBaseball(ratings as any, age, coachingLevel),
@@ -103,21 +117,35 @@ const developSeason = async (
 		isSport("basketball") &&
 		(devOptions?.devFocus || devOptions?.mentorBoostKeys?.length)
 	) {
+		// Breakthrough: ~15% chance per season for players ≤24 with a focus archetype
+		const isBreakthrough =
+			devOptions?.devFocus !== undefined && age <= 24 && Math.random() < 0.15;
+
 		for (const key of RATINGS) {
 			if (key === "hgt") continue;
-			const focusBonus =
+
+			const isFocusKey =
 				devOptions?.devFocus &&
-				DEV_FOCUS_RATINGS[devOptions.devFocus].includes(key as string)
-					? 4
-					: 0;
-			const mentorBonus = devOptions?.mentorBoostKeys?.includes(key as string)
-				? 2
+				DEV_FOCUS_RATINGS[devOptions.devFocus].includes(key as string);
+			const isMentorKey = devOptions?.mentorBoostKeys?.includes(key as string);
+
+			if (!isFocusKey && !isMentorKey) continue;
+
+			const focusBonus = isFocusKey
+				? isBreakthrough
+					? random.randInt(12, 22)
+					: 4
 				: 0;
-			if (focusBonus || mentorBonus) {
-				(ratings as any)[key] = limitRating(
-					(ratings as any)[key] + focusBonus + mentorBonus,
-				);
-			}
+			const mentorBonus = isMentorKey ? 2 : 0;
+
+			const newVal = (ratings as any)[key] + focusBonus + mentorBonus;
+
+			// Guaranteed floor: focus ratings never regress from where they started the season
+			const floor = isFocusKey
+				? (ratingSnapshot[key as string] ?? newVal)
+				: -Infinity;
+
+			(ratings as any)[key] = limitRating(Math.max(newVal, floor));
 		}
 	}
 };

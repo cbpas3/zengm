@@ -5,10 +5,14 @@ import type { DevFocusType } from "../../../common/types.ts";
 type Player = View<"roster">["players"][number];
 
 const DEV_FOCUS_OPTIONS: { value: DevFocusType; label: string }[] = [
-	{ value: "scoring", label: "Scoring" },
-	{ value: "defense", label: "Defense" },
-	{ value: "athleticism", label: "Athleticism" },
-	{ value: "playmaking", label: "Playmaking" },
+	{ value: "sharpshooter", label: "Sharpshooter" },
+	{ value: "slasher", label: "Slasher" },
+	{ value: "postScorer", label: "Post Scorer" },
+	{ value: "playmaker", label: "Playmaker" },
+	{ value: "threeAndD", label: "3-and-D" },
+	{ value: "lockdown", label: "Lockdown" },
+	{ value: "athletic", label: "Athletic" },
+	{ value: "floorGeneral", label: "Floor General" },
 ];
 
 const PlayerDevelopmentControls = ({
@@ -61,7 +65,7 @@ const PlayerDevelopmentControls = ({
 				}}
 				title="Development focus"
 			>
-				<option value="">Focus: None</option>
+				<option value="">Archetype: None</option>
 				{DEV_FOCUS_OPTIONS.map(({ value, label }) => (
 					<option key={value} value={value}>
 						{label}

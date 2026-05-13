@@ -1133,7 +1133,15 @@ export type PlayerStats = any;
 
 export type RelativeType = "brother" | "father" | "son";
 
-export type DevFocusType = "scoring" | "defense" | "athleticism" | "playmaking";
+export type DevFocusType =
+	| "sharpshooter"
+	| "slasher"
+	| "postScorer"
+	| "playmaker"
+	| "threeAndD"
+	| "lockdown"
+	| "athletic"
+	| "floorGeneral";
 
 export type Relative = {
 	type: RelativeType;
