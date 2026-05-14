@@ -203,16 +203,18 @@ export const generateTradingBlockOffers = async (
 			)
 			.slice(0, 9);
 
-		for (const p of topPlayers) {
+		// Only register non-franchise players as offerable (skip the #1 player)
+		for (const p of topPlayers.slice(1)) {
 			const key = `${p.firstName} ${p.lastName}`.toLowerCase();
 			playerNameToPid.set(`${t.tid}:${key}`, p.pid);
 		}
 
 		const playerList = topPlayers
-			.map((p) => {
+			.map((p, idx) => {
 				const r = p.ratings.at(-1)!;
 				const yrs = p.contract.exp - season + 1;
-				return `  - ${p.firstName} ${p.lastName} (${r.pos}, age ${season - p.born.year}, OVR ${r.ovr}, ${yrs}yr)`;
+				const tag = idx === 0 ? " [FRANCHISE — DO NOT OFFER]" : "";
+				return `  - ${p.firstName} ${p.lastName} (${r.pos}, age ${season - p.born.year}, OVR ${r.ovr}, ${yrs}yr)${tag}`;
 			})
 			.join("\n");
 
@@ -228,13 +230,15 @@ A player is available on the trading block:
 ${offeredDesc}
 
 **Critical instructions:**
-1. Draw on your deep knowledge of real NBA history at this exact point in time (${season}).
-2. Consider each player's real reputation, attitude, locker-room presence, injury history, and how front offices genuinely viewed them in ${season}. If a player had well-known character issues, only desperate or risk-tolerant organizations would pursue them — and at a discount.
-3. Consider each team's real historical situation in ${season}: their championship window, organizational culture (some teams were character-first, others win-at-all-costs), coaching staff preferences, and roster needs.
-4. Only list players from their exact roster below. Do not invent players.
-5. Propose 3–5 teams that would realistically pursue this player. For each, name 1–3 players they would offer.
+1. ROSTER DATA IS GROUND TRUTH. Every player listed below is currently on that team right now in ${season}. Do not assume any trades, departures, or roster changes that are not reflected in the data. If a player appears on a team's roster, they are there — regardless of what you know about real NBA history after ${season}.
+2. NEVER include a [FRANCHISE — DO NOT OFFER] player in an offer. They are context only.
+3. NEVER include in an offer a player your reasoning identifies as the key reason the team wants this trade target (e.g. if you say "to pair with X", X must not be in the offer).
+4. Only name players from that team's exact roster. Do not invent players.
+5. Use your knowledge of each player's real reputation, attitude, locker-room presence, and injury history as of ${season} to judge which teams would realistically pursue the trade target — and at what price.
+6. Use your knowledge of each team's real organizational culture, coaching staff, and roster needs as of ${season} to determine who are realistic suitors.
+7. Propose 3–5 teams. For each, name 1–3 tradeable (non-franchise) players they would offer.
 
-League rosters (tradeable players only):
+League rosters:
 ${teamEntries.join("\n\n")}
 
 Respond ONLY with valid JSON, no markdown fences:
