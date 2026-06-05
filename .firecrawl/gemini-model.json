@@ -1,0 +1,67 @@
+{
+	"success": true,
+	"data": {
+		"web": [
+			{
+				"url": "https://ai.google.dev/gemini-api/docs/models",
+				"title": "Models | Gemini API - Google AI for Developers",
+				"description": "Gemini models are available in either stable, preview, latest, or experimental versions. Note: The following list refers to the model string ...",
+				"position": 1
+			},
+			{
+				"url": "https://deepmind.google/models/gemini/flash-lite/",
+				"title": "Gemini 3.1 Flash-Lite - Google DeepMind",
+				"description": "Gemini 3.1 Flash-Lite is a scalable thinking model for high-volume tasks at low cost and latency.",
+				"position": 2
+			},
+			{
+				"url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-lite",
+				"title": "Gemini 3.1 Flash-Lite | Gemini Enterprise Agent Platform",
+				"description": "Gemini 3.1 Flash-Lite is our most cost-efficient Gemini model, optimized for low latency use cases for high-volume, cost-sensitive LLM traffic.",
+				"position": 3
+			},
+			{
+				"url": "https://firebase.google.com/docs/ai-logic/models",
+				"title": "Learn about supported models | Firebase AI Logic - Google",
+				"description": "For the Vertex AI Gemini API, preview models released after June 2025 usually require you to set the model's location to global . Model names of preview ...",
+				"position": 4
+			},
+			{
+				"url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-1-flash-lite/",
+				"title": "Gemini 3.1 Flash-Lite: Built for intelligence at scale",
+				"description": "Google made a new AI model called Gemini 3.1 Flash-Lite. It's super fast and cheap to use, so more people can use it. This AI is good at ...",
+				"position": 5
+			},
+			{
+				"url": "https://www.reddit.com/r/GeminiAI/comments/1sio2mf/found_this_list_over_all_google_ai_models_is/",
+				"title": "Found this list over all google ai models. Is anything new/suprising?",
+				"description": "This is why I use Google AI Studio instead of the Gemini app. r/GeminiAI - This is why I use Google AI Studio instead of the Gemini.",
+				"position": 6
+			},
+			{
+				"url": "https://docs.litellm.ai/docs/providers/gemini",
+				"title": "Gemini - Google AI Studio - LiteLLM",
+				"description": "LiteLLM supports Gemini TTS models that can generate audio responses using the OpenAI-compatible audio parameter format.",
+				"position": 7
+			},
+			{
+				"url": "https://ai.google.dev/gemini-api/docs/changelog",
+				"title": "Release notes | Gemini API - Google AI for Developers",
+				"description": "The gemini-3.1-flash-lite-preview model has been shut down. Use gemini-3.1-flash-lite instead. May 19, 2026. Released gemini-3.5-flash , the generally ...",
+				"position": 8
+			},
+			{
+				"url": "https://en.wikipedia.org/wiki/Gemini_(language_model)",
+				"title": "Gemini (language model) - Wikipedia",
+				"description": "On March 3, 2026, Google released Gemini 3.1 Flash Lite to Developers in the Google API. ... First-ever Gemini Flash-Lite model designed for cost-efficiency and ...",
+				"position": 9
+			},
+			{
+				"url": "https://medium.com/data-science-in-your-pocket/google-gemini-3-1-flash-lite-is-here-1babbb61bf04",
+				"title": "Google Gemini 3.1 Flash-Lite is here !! | by Mehul Gupta - Medium",
+				"description": "On March 3, 2026, Google introduced Gemini 3.1 Flash-Lite, the fastest and most cost-efficient model in the Gemini 3 family.",
+				"position": 10
+			}
+		]
+	}
+}
