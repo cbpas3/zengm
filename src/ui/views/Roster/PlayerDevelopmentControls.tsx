@@ -15,6 +15,27 @@ const DEV_FOCUS_OPTIONS: { value: DevFocusType; label: string }[] = [
 	{ value: "floorGeneral", label: "Floor General" },
 ];
 
+const WORK_ETHIC_STYLE: Record<
+	string,
+	{ bg: string; text: string; label: string }
+> = {
+	elite: { bg: "#198754", text: "#fff", label: "Elite Work Ethic" },
+	high: { bg: "#0d6efd", text: "#fff", label: "High Work Ethic" },
+	average: { bg: "#6c757d", text: "#fff", label: "Avg Work Ethic" },
+	low: { bg: "#dc3545", text: "#fff", label: "Low Work Ethic" },
+};
+
+const DEV_PROFILE_STYLE: Record<
+	string,
+	{ bg: string; text: string; label: string }
+> = {
+	earlyBloom: { bg: "#fd7e14", text: "#fff", label: "Early Bloom" },
+	lateBloom: { bg: "#6610f2", text: "#fff", label: "Late Bloom" },
+	consistent: { bg: "#20c997", text: "#fff", label: "Consistent" },
+	physical: { bg: "#0dcaf0", text: "#000", label: "Physical" },
+	standard: { bg: "#adb5bd", text: "#000", label: "Standard" },
+};
+
 const PlayerDevelopmentControls = ({
 	p,
 	players,
@@ -103,6 +124,43 @@ const PlayerDevelopmentControls = ({
 					))}
 				</select>
 			) : null}
+
+			{(() => {
+				const ethic = (p as any).workEthic ?? "average";
+				const s = WORK_ETHIC_STYLE[ethic];
+				return (
+					<span
+						style={{
+							fontSize: "0.7rem",
+							padding: "1px 6px",
+							borderRadius: 4,
+							background: s.bg,
+							color: s.text,
+							alignSelf: "flex-start",
+						}}
+					>
+						{s.label}
+					</span>
+				);
+			})()}
+			{(() => {
+				const profile = (p as any).devProfile ?? "standard";
+				const s = DEV_PROFILE_STYLE[profile];
+				return (
+					<span
+						style={{
+							fontSize: "0.7rem",
+							padding: "1px 6px",
+							borderRadius: 4,
+							background: s.bg,
+							color: s.text,
+							alignSelf: "flex-start",
+						}}
+					>
+						{s.label}
+					</span>
+				);
+			})()}
 		</div>
 	);
 };

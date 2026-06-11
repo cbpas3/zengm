@@ -75,8 +75,6 @@ You have deep knowledge of real NBA history. Factor in each player's actual repu
 
 Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words explaining why.`;
 
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), 8000);
 	try {
 		const response = await fetch(
 			`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
@@ -87,7 +85,7 @@ Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words expl
 					contents: [{ parts: [{ text: prompt }] }],
 					generationConfig: { temperature: 0.2, maxOutputTokens: 80 },
 				}),
-				signal: controller.signal,
+				signal: AbortSignal.timeout(8000),
 			},
 		);
 
@@ -103,8 +101,6 @@ Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words expl
 		return { accepted, reason };
 	} catch {
 		return null;
-	} finally {
-		clearTimeout(timer);
 	}
 };
 
@@ -125,8 +121,7 @@ const callGemini = async (
 	apiKey: string,
 	prompt: string,
 ): Promise<string | null> => {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), 15000);
+	console.log("[Gemini] callGemini: starting fetch");
 	try {
 		const response = await fetch(
 			`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
@@ -137,17 +132,26 @@ const callGemini = async (
 					contents: [{ parts: [{ text: prompt }] }],
 					generationConfig: { temperature: 0.4, maxOutputTokens: 1200 },
 				}),
-				signal: controller.signal,
+				signal: AbortSignal.timeout(15000),
 			},
 		);
 
-		if (!response.ok) return null;
+		console.log("[Gemini] callGemini: response status", response.status);
+		if (!response.ok) {
+			const errText = await response.text().catch(() => "(unreadable)");
+			console.log("[Gemini] callGemini: error body", errText);
+			return null;
+		}
 		const data = await response.json();
-		return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-	} catch {
+		const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+		console.log(
+			"[Gemini] callGemini: got text",
+			text ? text.slice(0, 100) : null,
+		);
+		return text;
+	} catch (err) {
+		console.log("[Gemini] callGemini: caught error", String(err));
 		return null;
-	} finally {
-		clearTimeout(timer);
 	}
 };
 
@@ -157,6 +161,7 @@ export const generateTradingBlockOffers = async (
 ): Promise<TradingBlockOffer[] | null> => {
 	const settings = await getGlobalSettings();
 	const apiKey = settings.geminiApiKey;
+	console.log("[Gemini] generateTradingBlockOffers: apiKey present?", !!apiKey);
 	if (!apiKey) return null;
 
 	const season = g.get("season");

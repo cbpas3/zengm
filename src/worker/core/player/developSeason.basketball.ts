@@ -4,6 +4,7 @@ import type {
 	PlayerRatings,
 	RatingKey,
 } from "../../../common/types.basketball.ts";
+import type { DevProfileType } from "../../../common/types.ts";
 import { coachingEffect } from "../../../common/budgetLevels.ts";
 
 type RatingFormula = {
@@ -162,7 +163,11 @@ const ratingsFormulas: Record<Exclude<RatingKey, "hgt">, RatingFormula> = {
 	},
 };
 
-const calcBaseChange = (age: number, coachingLevel: number): number => {
+const calcBaseChange = (
+	age: number,
+	coachingLevel: number,
+	devProfile?: DevProfileType,
+): number => {
 	let val: number;
 
 	if (age <= 21) {
@@ -186,9 +191,26 @@ const calcBaseChange = (age: number, coachingLevel: number): number => {
 		val = -6;
 	}
 
+	// Apply devProfile modifier to val before noise
+	if (devProfile === "earlyBloom") {
+		if (age <= 25) {
+			val *= 1.3;
+		} else if (age >= 31) {
+			val *= 0.8;
+		}
+	} else if (devProfile === "lateBloom") {
+		if (age <= 23) {
+			val *= 0.8;
+		} else if (age <= 30) {
+			val *= 1.15;
+		}
+	}
+
 	// Noise bounds are set so young players can never have a full decline year from noise alone.
 	// The negative bound never exceeds the base value, ensuring the floor is 0 or positive.
-	if (age <= 21) {
+	if (devProfile === "consistent" && val > 0) {
+		// No variance when improving — guaranteed steady growth
+	} else if (age <= 21) {
 		// base 4 — worst case: 4 - 3 = 1 (always positive)
 		val += helpers.bound(random.realGauss(0, 5), -3, 20);
 	} else if (age <= 23) {
@@ -213,10 +235,14 @@ const calcBaseChange = (age: number, coachingLevel: number): number => {
 	return val;
 };
 
+const PHYSICAL_KEYS = new Set(["spd", "jmp", "stre", "endu"]);
+
 const developSeason = (
 	ratings: PlayerRatings,
 	age: number,
 	coachingLevel: number,
+	devProfile?: DevProfileType,
+	minutesMultiplier: number = 1.0,
 ) => {
 	// In young players, height can sometimes increase
 	if (age <= 21) {
@@ -231,16 +257,20 @@ const developSeason = (
 		}
 	}
 
-	const baseChange = calcBaseChange(age, coachingLevel);
+	const baseChange = calcBaseChange(age, coachingLevel, devProfile);
 
 	for (const key of helpers.keys(ratingsFormulas)) {
-		const ageModifier = ratingsFormulas[key].ageModifier(age);
+		// physical: athletic keys age 2 years slower for ageModifier lookup
+		const ageForModifier =
+			devProfile === "physical" && PHYSICAL_KEYS.has(key) ? age - 2 : age;
+		const ageModifier = ratingsFormulas[key].ageModifier(ageForModifier);
 		const changeLimits = ratingsFormulas[key].changeLimits(age);
 
 		ratings[key] = limitRating(
 			ratings[key] +
 				helpers.bound(
-					(baseChange + ageModifier) * random.uniform(0.4, 1.4),
+					(baseChange * minutesMultiplier + ageModifier) *
+						random.uniform(0.4, 1.4),
 					changeLimits[0],
 					changeLimits[1],
 				),

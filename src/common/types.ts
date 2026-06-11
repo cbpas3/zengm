@@ -1144,6 +1144,13 @@ export type DevFocusType =
 	| "athletic"
 	| "floorGeneral";
 
+export type DevProfileType =
+	| "earlyBloom"
+	| "lateBloom"
+	| "consistent"
+	| "physical"
+	| "standard";
+
 export type Relative = {
 	type: RelativeType;
 	pid: number;
@@ -1225,6 +1232,9 @@ export type PlayerWithoutKey<PlayerRatings = any> = {
 	devOverride?: boolean;
 	devFocus?: DevFocusType;
 	mentorPid?: number;
+	workEthic?: "elite" | "high" | "average" | "low";
+	devProfile?: DevProfileType;
+	focusFloor?: Partial<Record<string, number>>;
 	ratings: NonEmptyArray<PlayerRatings>;
 	real?: boolean;
 	relatives: Relative[];

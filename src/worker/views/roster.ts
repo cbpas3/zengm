@@ -186,6 +186,8 @@ const updateRoster = async (
 			"devOverride",
 			"devFocus",
 			"mentorPid",
+			"workEthic",
+			"devProfile",
 			"watch",
 			"untradable",
 			"hof",

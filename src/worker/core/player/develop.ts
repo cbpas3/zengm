@@ -10,6 +10,7 @@ import skills from "./skills.ts";
 import { g, helpers, random } from "../../util/index.ts";
 import type {
 	DevFocusType,
+	DevProfileType,
 	MinimalPlayerRatings,
 } from "../../../common/types.ts";
 import { idb } from "../../db/index.ts";
@@ -20,6 +21,14 @@ import { DEFAULT_LEVEL } from "../../../common/budgetLevels.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
 
 const NUM_SIMULATIONS = 20; // Higher is more accurate, but slower. Low accuracy is fine, though!
+
+const getMinutesMultiplier = (mpg: number): number => {
+	if (mpg >= 30) return 1.15;
+	if (mpg >= 22) return 1.0;
+	if (mpg >= 12) return 0.8;
+	if (mpg >= 5) return 0.6;
+	return 0.45;
+};
 
 // Repeatedly simulate aging up to 29, and pick the 75th percentile max
 export const monteCarloPot = async ({
@@ -119,12 +128,16 @@ const develop = async (
 		};
 		pos?: string;
 		ratings: MinimalPlayerRatings[];
+		stats: { min: number; gp: number; playoffs: boolean }[];
 		tid: number;
 		weight: number;
 		srID?: string;
 		devOverride?: boolean;
 		devFocus?: DevFocusType;
 		mentorPid?: number;
+		workEthic?: "elite" | "high" | "average" | "low";
+		devProfile?: DevProfileType;
+		focusFloor?: Partial<Record<string, number>>;
 	},
 	years: number = 1,
 	newPlayer: boolean = false,
@@ -133,6 +146,15 @@ const develop = async (
 ) => {
 	const ratings = p.ratings.at(-1)!;
 	let age = ratings.season - p.born.year;
+
+	const lastRegularSeason = !newPlayer
+		? [...p.stats].reverse().find((s) => !s.playoffs)
+		: undefined;
+	const mpg =
+		lastRegularSeason && lastRegularSeason.gp > 0
+			? lastRegularSeason.min / lastRegularSeason.gp
+			: undefined;
+	const minutesMultiplier = mpg !== undefined ? getMinutesMultiplier(mpg) : 1.0;
 
 	for (let i = 0; i < years; i++) {
 		// (CONFUSING!) Don't increment age for existing players developing one season (i.e. newPhasePreseason) because the season is already incremented before this function is called. But in other scenarios (new league and draft picks), the season is not changing, so age should be incremented every iteration of this loop.
@@ -147,6 +169,7 @@ const develop = async (
 			}
 
 			let mentorBoostKeys: string[] | undefined;
+			let mentorRatings: Partial<Record<string, number>> | undefined;
 			if (p.mentorPid !== undefined) {
 				const mentor = await idb.cache.players.get(p.mentorPid);
 				if (mentor && mentor.tid === p.tid) {
@@ -170,14 +193,32 @@ const develop = async (
 					mentorBoostKeys = [...skillKeys]
 						.sort((a, b) => (lastRatings as any)[b] - (lastRatings as any)[a])
 						.slice(0, 4);
+					mentorRatings = Object.fromEntries(
+						mentorBoostKeys.map((k) => [k, (lastRatings as any)[k]]),
+					);
 				}
 			}
 
-			await developSeason(ratings, age, p.srID, coachingLevel, false, {
+			const devOptions = {
 				devOverride: p.devOverride,
 				devFocus: p.devFocus,
 				mentorBoostKeys,
-			});
+				mentorRatings,
+				workEthic: p.workEthic,
+				devProfile: p.devProfile,
+				minutesMultiplier,
+				focusFloor: p.focusFloor,
+			};
+			await developSeason(
+				ratings,
+				age,
+				p.srID,
+				coachingLevel,
+				false,
+				devOptions,
+			);
+			// Persist the (potentially decayed) floor back onto the player
+			p.focusFloor = devOptions.focusFloor;
 		}
 	}
 

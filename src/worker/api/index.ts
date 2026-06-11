@@ -163,6 +163,7 @@ import { getAdjustedTicketPrice } from "../../common/getAdjustedTicketPrice.ts";
 import { gameAttributesArrayToObject } from "../../common/gameAttributesArrayToObject.ts";
 import { bySport, isSport } from "../../common/sportFunctions.ts";
 import { generateTradingBlockOffers } from "../util/gemini.ts";
+import { DEV_FOCUS_RATINGS } from "../core/player/developSeason.ts";
 
 const acceptContractNegotiation = async ({
 	pid,
@@ -4282,7 +4283,20 @@ const updatePlayerDevelopment = async ({
 		p.devOverride = devOverride || undefined;
 	}
 	if (devFocus !== undefined) {
-		p.devFocus = devFocus ?? undefined;
+		const newFocus = devFocus ?? undefined;
+		if (newFocus !== p.devFocus) {
+			if (newFocus) {
+				// First time setting a focus — snapshot current ratings as the floor
+				const focusRatings = DEV_FOCUS_RATINGS[newFocus];
+				p.focusFloor = {};
+				for (const key of focusRatings) {
+					p.focusFloor[key] = (p.ratings[p.ratings.length - 1] as any)[key];
+				}
+			} else {
+				p.focusFloor = undefined;
+			}
+		}
+		p.devFocus = newFocus;
 	}
 
 	if (mentorPid !== undefined) {

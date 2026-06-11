@@ -1,6 +1,7 @@
 import genRatings from "./genRatings.ts";
 import { face, g } from "../../util/index.ts";
 import type {
+	DevProfileType,
 	MinimalPlayerRatings,
 	NonEmptyArray,
 	PlayerWithoutKey,
@@ -8,6 +9,23 @@ import type {
 } from "../../../common/types.ts";
 import genWeight from "./genWeight.ts";
 import genMoodTraits from "./genMoodTraits.ts";
+
+const generateWorkEthic = (): PlayerWithoutKey["workEthic"] => {
+	const r = Math.random();
+	if (r < 0.15) return "elite";
+	if (r < 0.45) return "high";
+	if (r < 0.85) return "average";
+	return "low";
+};
+
+const generateDevProfile = (): DevProfileType => {
+	const r = Math.random();
+	if (r < 0.15) return "earlyBloom";
+	if (r < 0.25) return "lateBloom";
+	if (r < 0.45) return "consistent";
+	if (r < 0.6) return "physical";
+	return "standard";
+};
 
 const generate = (
 	tid: number,
@@ -98,6 +116,8 @@ const generate = (
 		transactions: [],
 		weight,
 		yearsFreeAgent: 0,
+		workEthic: generateWorkEthic(),
+		devProfile: generateDevProfile(),
 
 		// These should be set by updateValues after player is completely done (automatic in develop)
 		value: 0,

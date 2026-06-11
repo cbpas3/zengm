@@ -4,6 +4,7 @@ import developSeasonFootball from "./developSeason.football.ts";
 import developSeasonHockey from "./developSeason.hockey.ts";
 import type {
 	DevFocusType,
+	DevProfileType,
 	MinimalPlayerRatings,
 } from "../../../common/types.ts";
 import { g, helpers, random } from "../../util/index.ts";
@@ -20,9 +21,21 @@ type DevOptions = {
 	devOverride?: boolean;
 	devFocus?: DevFocusType;
 	mentorBoostKeys?: string[];
+	mentorRatings?: Partial<Record<string, number>>;
+	workEthic?: "elite" | "high" | "average" | "low";
+	devProfile?: DevProfileType;
+	minutesMultiplier?: number;
+	focusFloor?: Partial<Record<string, number>>;
 };
 
-const DEV_FOCUS_RATINGS: Record<DevFocusType, string[]> = {
+const WORK_ETHIC_MULTIPLIER: Record<string, number> = {
+	elite: 1.5,
+	high: 1.2,
+	average: 1.0,
+	low: 0.7,
+};
+
+export const DEV_FOCUS_RATINGS: Record<DevFocusType, string[]> = {
 	sharpshooter: ["tp", "fg", "ft"],
 	slasher: ["dnk", "spd", "jmp"],
 	postScorer: ["ins", "stre", "reb"],
@@ -31,6 +44,32 @@ const DEV_FOCUS_RATINGS: Record<DevFocusType, string[]> = {
 	lockdown: ["diq", "stre", "spd", "jmp"],
 	athletic: ["spd", "jmp", "endu", "stre"],
 	floorGeneral: ["oiq", "pss", "drb"],
+};
+
+const getMentorBonus = (
+	mentorRatings: Partial<Record<string, number>> | undefined,
+	key: string,
+	menteeCurrentRating: number,
+): number => {
+	if (!mentorRatings) return 2;
+	const mentorVal = mentorRatings[key];
+	if (mentorVal === undefined) return 1;
+	const gap = mentorVal - menteeCurrentRating;
+	if (gap > 30) return 3;
+	if (gap > 15) return 2;
+	if (gap > 0) return 1;
+	return 0;
+};
+
+const getBreakthroughProb = (
+	age: number,
+	devProfile?: DevProfileType,
+): number => {
+	if (devProfile === "lateBloom" && age <= 30) return 0.05;
+	if (age <= 22) return 0.2;
+	if (age <= 24) return 0.15;
+	if (age <= 27) return 0.08;
+	return 0;
 };
 
 const developSeason = async (
@@ -54,7 +93,13 @@ const developSeason = async (
 	// Step 1: Sport-specific development (no bonus params — bonuses applied after RPD below)
 	bySport({
 		baseball: developSeasonBaseball(ratings as any, age, coachingLevel),
-		basketball: developSeasonBasketball(ratings as any, age, coachingLevel),
+		basketball: developSeasonBasketball(
+			ratings as any,
+			age,
+			coachingLevel,
+			devOptions?.devProfile,
+			devOptions?.minutesMultiplier ?? 1.0,
+		),
 		football: developSeasonFootball(ratings as any, age, coachingLevel),
 		hockey: developSeasonHockey(ratings as any, age, coachingLevel),
 	});
@@ -117,9 +162,12 @@ const developSeason = async (
 		isSport("basketball") &&
 		(devOptions?.devFocus || devOptions?.mentorBoostKeys?.length)
 	) {
-		// Breakthrough: ~15% chance per season for players ≤24 with a focus archetype
+		// Breakthrough: tiered probability by age, scaled by work ethic
+		const ethicMult = WORK_ETHIC_MULTIPLIER[devOptions?.workEthic ?? "average"];
 		const isBreakthrough =
-			devOptions?.devFocus !== undefined && age <= 24 && Math.random() < 0.15;
+			devOptions?.devFocus !== undefined &&
+			Math.random() <
+				getBreakthroughProb(age, devOptions?.devProfile) * ethicMult;
 
 		for (const key of RATINGS) {
 			if (key === "hgt") continue;
@@ -131,21 +179,50 @@ const developSeason = async (
 
 			if (!isFocusKey && !isMentorKey) continue;
 
-			const focusBonus = isFocusKey
+			const rawFocusBonus = isFocusKey
 				? isBreakthrough
 					? random.randInt(12, 22)
 					: 4
 				: 0;
-			const mentorBonus = isMentorKey ? 2 : 0;
+			const headroomFactor = isFocusKey
+				? Math.max(0.25, (100 - (ratings as any)[key]) / 50)
+				: 1;
+			const focusBonus = Math.round(rawFocusBonus * headroomFactor * ethicMult);
+			const mentorBonus = isMentorKey
+				? getMentorBonus(
+						devOptions?.mentorRatings,
+						key as string,
+						(ratings as any)[key],
+					)
+				: 0;
 
 			const newVal = (ratings as any)[key] + focusBonus + mentorBonus;
 
-			// Guaranteed floor: focus ratings never regress from where they started the season
-			const floor = isFocusKey
-				? (ratingSnapshot[key as string] ?? newVal)
-				: -Infinity;
+			const persistedFloor = isFocusKey
+				? devOptions?.focusFloor?.[key as string]
+				: undefined;
+			const floor = persistedFloor !== undefined ? persistedFloor : -Infinity;
 
-			(ratings as any)[key] = limitRating(Math.max(newVal, floor));
+			const finalVal = limitRating(Math.max(newVal, floor));
+			(ratings as any)[key] = finalVal;
+
+			// Decay or advance the persistent floor
+			if (
+				isFocusKey &&
+				persistedFloor !== undefined &&
+				devOptions?.focusFloor
+			) {
+				if (newVal >= persistedFloor) {
+					devOptions.focusFloor[key as string] = finalVal;
+				} else {
+					const originalSnapshot =
+						ratingSnapshot[key as string] ?? persistedFloor;
+					devOptions.focusFloor[key as string] = Math.max(
+						persistedFloor - 1,
+						originalSnapshot - 3,
+					);
+				}
+			}
 		}
 	}
 };
