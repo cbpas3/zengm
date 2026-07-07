@@ -13,6 +13,10 @@ import {
 } from "../../../common/constants.ts";
 import playThroughInjuriesFactor from "../../../common/playThroughInjuriesFactor.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
+import {
+	computeDepthTax,
+	countTopPositionGroups,
+} from "../team/positionalDepthTax.ts";
 
 const MAX_NUM_PLAYERS_PACE = 7;
 
@@ -389,6 +393,19 @@ export const processTeam = async (
 		// Game plan pace modifier: 0=×0.85, 50=×1.0 (neutral), 100=×1.15
 		if (teamInput.gamePlan !== undefined) {
 			t.pace *= 0.85 + (teamInput.gamePlan.pace / 100) * 0.3;
+		}
+
+		// Positional-depth tax: punish rosters that don't cover the position spectrum.
+		// Read positions from the same top-8-by-rosterOrder set that actually plays, not a
+		// separate sort - see CLAUDE.md "Game Plan" / positional-depth-tax notes.
+		if (g.get("positionalDepthTax")) {
+			const healthyPositions: string[] = [];
+			for (const p of t.player) {
+				if (p.injury.gamesRemaining === 0 || p.injury.playingThrough) {
+					healthyPositions.push(p.pos);
+				}
+			}
+			t.depthTax = computeDepthTax(countTopPositionGroups(healthyPositions));
 		}
 	}
 

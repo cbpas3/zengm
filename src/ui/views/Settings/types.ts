@@ -162,6 +162,7 @@ export type Key =
 	| "alwaysShowCountry"
 	| "neutralSite"
 	| "rpdPot"
+	| "positionalDepthTax"
 	| "saveOldBoxScores"
 	| "currencyFormat"
 	| "overtimeLength"

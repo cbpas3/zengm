@@ -407,6 +407,10 @@ export const getDefaultSettings = () => {
 		),
 		neutralSite: unwrapGameAttribute(defaultGameAttributes, "neutralSite"),
 		rpdPot: unwrapGameAttribute(defaultGameAttributes, "rpdPot"),
+		positionalDepthTax: unwrapGameAttribute(
+			defaultGameAttributes,
+			"positionalDepthTax",
+		),
 		saveOldBoxScores: unwrapGameAttribute(
 			defaultGameAttributes,
 			"saveOldBoxScores",

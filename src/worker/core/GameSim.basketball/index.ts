@@ -115,6 +115,13 @@ type TeamGameSim = {
 		helpAggression: number;
 		defensiveGlass: number;
 	};
+	depthTax?: {
+		rebounding: number;
+		interiorD: number;
+		ballHandling: number;
+		oppRim: number;
+		overall: number;
+	};
 };
 
 type PossessionOutcome =
@@ -1334,6 +1341,23 @@ class GameSim extends GameSimBase {
 				this.synergyFactor * this.team[t].synergy.def;
 			this.team[t].compositeRating.blocking +=
 				this.synergyFactor * this.team[t].synergy.def;
+
+			// Positional-depth tax: no healthy big hits rebounding + interior D (blocking is
+			// heavily hgt-weighted, the closest team-level proxy for rim protection); no
+			// healthy guard hits ball security (passing); extreme imbalance dings everything.
+			const depthTax = this.team[t].depthTax;
+			if (depthTax !== undefined) {
+				this.team[t].compositeRating.rebounding *= depthTax.rebounding;
+				this.team[t].compositeRating.blocking *= depthTax.interiorD;
+				this.team[t].compositeRating.passing *= depthTax.ballHandling;
+
+				this.team[t].compositeRating.dribbling *= depthTax.overall;
+				this.team[t].compositeRating.passing *= depthTax.overall;
+				this.team[t].compositeRating.rebounding *= depthTax.overall;
+				this.team[t].compositeRating.defense *= depthTax.overall;
+				this.team[t].compositeRating.defensePerimeter *= depthTax.overall;
+				this.team[t].compositeRating.blocking *= depthTax.overall;
+			}
 		}
 	}
 
@@ -2004,6 +2028,9 @@ class GameSim extends GameSimBase {
 
 				// Staying attached through picks and collapsing to help both cut into rim efficiency
 				probMake *= pickCoverageInteriorFactor * helpAggressionAtRimFactor;
+
+				// No healthy rim protector on the other end - easier finishes at the rim
+				probMake *= this.team[this.d]!.depthTax?.oppRim ?? 1;
 			} else {
 				// Post up
 				fgaLogType = "fgaLowPost";

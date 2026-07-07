@@ -171,6 +171,7 @@ type Key =
 	| "alwaysShowCountry"
 	| "neutralSite"
 	| "rpdPot"
+	| "positionalDepthTax"
 	| "saveOldBoxScores"
 	| "currencyFormat"
 	| "overtimeLength"
@@ -392,6 +393,7 @@ const updateSettings = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			alwaysShowCountry: g.get("alwaysShowCountry"),
 			neutralSite: g.get("neutralSite"),
 			rpdPot: g.get("rpdPot"),
+			positionalDepthTax: g.get("positionalDepthTax"),
 			saveOldBoxScores: g.get("saveOldBoxScores"),
 			currencyFormat: g.get("currencyFormat"),
 			overtimeLength: g.get("overtimeLength"),

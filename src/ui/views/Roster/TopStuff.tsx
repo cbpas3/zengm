@@ -6,6 +6,7 @@ import { toWorker } from "../../util/toWorker.ts";
 import InstructionsAndSortButtons from "./InstructionsAndSortButtons.tsx";
 import PlayThroughInjurySliders from "./PlayThroughInjuriesSliders.tsx";
 import GamePlanEditor from "./GamePlanEditor.tsx";
+import RosterBalance from "./RosterBalance.tsx";
 import type { View } from "../../../common/types.ts";
 import { bySport } from "../../../common/sportFunctions.ts";
 import Note from "../Player/Note.tsx";
@@ -331,6 +332,7 @@ const TopStuff = ({
 						<>
 							<div className="d-flex flex-column gap-3">
 								<RosterComposition players={players} />
+								<RosterBalance rosterBalance={(t as any).rosterBalance} />
 								{godMode && tid !== userTid ? (
 									<button
 										className="btn btn-god-mode"

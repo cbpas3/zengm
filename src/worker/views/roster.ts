@@ -12,6 +12,7 @@ import { addMood } from "./freeAgents.ts";
 import addFirstNameShort from "../util/addFirstNameShort.ts";
 import { getActualPlayThroughInjuries } from "../core/game/loadTeams.ts";
 import { bySport, isSport } from "../../common/sportFunctions.ts";
+import { countTopPositionGroups } from "../core/team/positionalDepthTax.ts";
 
 const sortByPos = (p: {
 	ratings: {
@@ -341,6 +342,19 @@ const updateRoster = async (
 			rank,
 		};
 		t2.seasonAttrs.avgAge = t2.seasonAttrs.avgAge ?? team.avgAge(players);
+
+		// Roster Balance readout - same position-group bucketing the positional-depth tax
+		// uses in the sim, so the penalty isn't invisible to the user.
+		if (
+			isSport("basketball") &&
+			g.get("positionalDepthTax") &&
+			inputs.season === g.get("season")
+		) {
+			const healthyPositions = players
+				.filter((p) => p.injury.gamesRemaining === 0)
+				.map((p) => p.ratings.pos);
+			(t2 as any).rosterBalance = countTopPositionGroups(healthyPositions);
+		}
 
 		for (const p of players) {
 			p.awards = p.awards.filter(

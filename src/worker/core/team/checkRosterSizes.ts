@@ -5,7 +5,8 @@ import { idb } from "../../db/index.ts";
 import { g, helpers, local } from "../../util/index.ts";
 import type { MinimalPlayerRatings, Player } from "../../../common/types.ts";
 import { KEY_POSITIONS_NEEDED } from "../freeAgents/getBest.ts";
-import { bySport } from "../../../common/sportFunctions.ts";
+import { bySport, isSport } from "../../../common/sportFunctions.ts";
+import { getPositionGroup } from "./positionalDepthTax.ts";
 
 export const dropPlayers = async (
 	players: Player<MinimalPlayerRatings>[],
@@ -66,10 +67,38 @@ export const dropPlayers = async (
 		}
 	}
 
+	// Basketball has no POSITION_COUNTS-based logic above, but shouldn't cut its last
+	// healthy big or guard just because a marginally higher-value wing is available -
+	// that's exactly the roster the positional-depth tax punishes.
+	let basketballGroupHealthyCounts:
+		| Record<"bigs" | "guards", number>
+		| undefined;
+	if (isSport("basketball") && g.get("positionalDepthTax")) {
+		basketballGroupHealthyCounts = { bigs: 0, guards: 0 };
+		for (const p of players) {
+			if (p.injury.gamesRemaining === 0) {
+				const group = getPositionGroup(p.ratings.at(-1)!.pos);
+				if (group === "bigs" || group === "guards") {
+					basketballGroupHealthyCounts[group] += 1;
+				}
+			}
+		}
+	}
+
 	players.sort((a, b) => a.value - b.value); // Lowest first
 
 	const releasedPIDs = [];
 	for (const p of players) {
+		if (basketballGroupHealthyCounts && p.injury.gamesRemaining === 0) {
+			const group = getPositionGroup(p.ratings.at(-1)!.pos);
+			if (
+				(group === "bigs" || group === "guards") &&
+				basketballGroupHealthyCounts[group] <= 1
+			) {
+				continue;
+			}
+		}
+
 		if (
 			counts &&
 			bySport({
@@ -100,6 +129,13 @@ export const dropPlayers = async (
 
 			if (countsHealthyKey?.[pos] !== undefined) {
 				countsHealthyKey[pos] -= 1;
+			}
+		}
+
+		if (basketballGroupHealthyCounts && p.injury.gamesRemaining === 0) {
+			const group = getPositionGroup(p.ratings.at(-1)!.pos);
+			if (group === "bigs" || group === "guards") {
+				basketballGroupHealthyCounts[group] -= 1;
 			}
 		}
 

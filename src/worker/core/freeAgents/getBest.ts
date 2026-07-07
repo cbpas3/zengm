@@ -3,7 +3,11 @@ import type { PlayerWithoutKey } from "../../../common/types.ts";
 import { DRAFT_BY_TEAM_OVR } from "../../../common/constants.ts";
 import { getTeamOvrDiffs } from "../draft/runPicks.ts";
 import { orderBy } from "../../../common/utils.ts";
-import { bySport } from "../../../common/sportFunctions.ts";
+import { bySport, isSport } from "../../../common/sportFunctions.ts";
+import {
+	getPositionGroup,
+	POSITION_GROUPS,
+} from "../team/positionalDepthTax.ts";
 
 // In some sports, extra check for certain important rare positions in case the only one was traded away. These should only be positions with weird unique skills, where you can't replace them easily with another position. Value is the number of players that should be at each position.
 export const KEY_POSITIONS_NEEDED = bySport<Record<string, number> | undefined>(
@@ -107,6 +111,34 @@ const getBest = <T extends PlayerWithoutKey>(
 		}
 	};
 
+	// Basketball has no exact-position needs (KEY_POSITIONS_NEEDED is undefined), but it
+	// still shouldn't sit at zero healthy bigs or zero healthy guards - that's exactly the
+	// roster the positional-depth tax punishes. Expressed as groups, not exact positions,
+	// since "any big" can't be said with the exact-match model above.
+	let missingPositionGroupsCache: ("bigs" | "guards")[] | undefined;
+	const getMissingPositionGroups = () => {
+		if (!isSport("basketball") || !g.get("positionalDepthTax")) {
+			return undefined;
+		}
+
+		if (missingPositionGroupsCache) {
+			return missingPositionGroupsCache;
+		}
+
+		missingPositionGroupsCache = (["bigs", "guards"] as const).filter(
+			(group) =>
+				!playersOnRoster.some(
+					(p) =>
+						p.injury.gamesRemaining === 0 &&
+						(POSITION_GROUPS[group] as readonly string[]).includes(
+							p.ratings.at(-1)!.pos,
+						),
+				),
+		);
+
+		return missingPositionGroupsCache;
+	};
+
 	for (const p of playersSorted) {
 		const salaryCapCheck =
 			payroll === undefined ||
@@ -121,12 +153,14 @@ const getBest = <T extends PlayerWithoutKey>(
 			playersOnRoster.length < maxRosterSize - 2;
 
 		// If none of the other checks were true and we can afford this player and it's at a position we have nobody at (like hockey goalie), go for it
+		const positionGroup = getPositionGroup(p.ratings.at(-1)!.pos);
 		const shouldAddPlayerPosition =
 			p.injury.gamesRemaining === 0 &&
 			!shouldAddPlayerNormal &&
 			!shouldAddPlayerMinContract &&
 			(salaryCapCheck || p.contract.amount <= minContract) &&
-			getKeyPositionsNeeded()?.includes(p.ratings.at(-1)!.pos);
+			(getKeyPositionsNeeded()?.includes(p.ratings.at(-1)!.pos) ||
+				getMissingPositionGroups()?.some((group) => group === positionGroup));
 
 		if (
 			shouldAddPlayerNormal ||

@@ -1352,6 +1352,14 @@ export const settings: Setting[] = (
 		},
 		{
 			category: "Challenge Modes",
+			key: "positionalDepthTax",
+			name: "Positional Depth Tax",
+			type: "bool",
+			description:
+				"Rosters that don't cover the position spectrum are penalized in the sim. No healthy big man in your rotation hurts rebounding and interior defense (and opponents finish better at the rim against you); no true point guard hurts ball security; and a rotation packed at one position group takes a small overall hit. Applies to every team, not just yours.",
+		},
+		{
+			category: "Challenge Modes",
 			key: "challengeSisyphusMode",
 			name: "Sisyphus Mode",
 			type: "bool",

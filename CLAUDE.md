@@ -274,6 +274,104 @@ adjustments) both depend on the sliders added here.
 
 ---
 
+## Feature 5: Positional-Depth Tax (Harder RPD Challenge, Phase 2)
+
+### What it does
+
+Punishes rosters that don't cover the position spectrum — the "stack five stars, ignore the
+center" min-maxing the RPD challenge is supposed to make hard. Gated behind the
+`positionalDepthTax` game attribute (default `false`); a neutral/no-op when off, so old saves and
+existing sims are unaffected. Applies to **every** team, user and AI alike (`processTeam` computes
+it for whichever `tid` it's given, no branch on `userTids`) — which is why Phase 2d (AI
+position-awareness) had to ship in the same phase: without it, the AI's already position-blind
+free-agent signing and roster-cut logic would eat the tax harder than the user ever would.
+
+### Position groups
+
+Read from the **top 8 healthy players by `rosterOrder`** (the same post-auto-sort set the sim
+actually plays), not a separate sort. Deliberately narrower than `rosterAutoSort.basketball.ts`'s
+`findStarters` "F/C" bucket (which also counts `SF`/`GF`), so a wing-heavy small-ball team still
+gets dinged on the glass even when auto-sort's 2-G/2-F-C requirement is satisfied:
+
+| Group  | Positions       |
+| ------ | --------------- |
+| Bigs   | `C`, `FC`, `PF` |
+| Wings  | `SF`, `GF`, `F` |
+| Guards | `PG`, `G`, `SG` |
+
+### Tax rules (locked tuning)
+
+Computed once per team per game in `processTeam`, attached as `t.depthTax` (all fields default `1`
+= no-op):
+
+- **No healthy big in the top 8** → `rebounding` and `interiorD` multipliers ×0.85 (folded into the
+  `rebounding` and `blocking` composite ratings — `blocking`'s weights are height-heavy, the
+  closest existing team-level proxy for rim protection), plus `oppRim` ×1.1 (opponents shoot better
+  at the rim against this team).
+- **No healthy guard in the top 8** → `ballHandling` ×0.9, folded into the `passing` composite
+  rating (raises `probTov`/`probStl` via the existing formulas — no new sim code needed there).
+- **Extreme imbalance** (6+ of the top 8 in one group) → small `overall` ×0.97 across all six
+  composite ratings `updateTeamCompositeRatings` recomputes per possession.
+
+### Sim wiring
+
+- `updateTeamCompositeRatings` (`GameSim.basketball/index.ts`) multiplies `rebounding` / `blocking`
+  / `passing` by the matching `depthTax` scalar, then all six recomputed composites by `overall`,
+  right after synergy is folded in.
+- `getShotInfo`'s `atRim` branch multiplies `probMake` by `this.team[this.d].depthTax?.oppRim ?? 1`
+  (the defending team's tax affects the shooter's efficiency).
+
+### AI position-awareness (required companion fix)
+
+Basketball AI roster-building was completely position-blind before this phase (`team.ovr` ignores
+position, `DRAFT_BY_TEAM_OVR` is `false` for basketball so FA signing goes by raw value,
+`KEY_POSITIONS_NEEDED` was `undefined` for basketball, and `dropPlayers`' position-count logic was
+`basketball: false`). Fixed narrowly, gated behind the same `positionalDepthTax` attribute:
+
+- `src/worker/core/team/positionalDepthTax.ts` — shared `POSITION_GROUPS`, `getPositionGroup`,
+  `countTopPositionGroups`, `computeDepthTax`. Single source of truth for the sim, the AI fixes
+  below, and the UI readout.
+- `src/worker/core/freeAgents/getBest.ts` — `shouldAddPlayerPosition` now also fires when the
+  signing team has zero healthy bigs or zero healthy guards anywhere on the roster (not just the
+  top 8), expressed as groups since `KEY_POSITIONS_NEEDED`'s exact-position model can't say "any
+  big."
+- `src/worker/core/team/checkRosterSizes.ts` (`dropPlayers`) — won't release a team's last healthy
+  big or guard while cutting down to `maxRosterSize`, mirroring the existing
+  football/hockey "don't cut your only kicker/goalie" guard.
+- **Known gap, deferred**: AI trade evaluation and draft picks are still position-blind (both lean
+  on the position-blind `team.ovr`/`value`). Ship FA + cuts first; add trade/draft awareness only
+  if AI teams still finish seasons bigless in testing.
+
+### UI (`Roster/RosterBalance.tsx`)
+
+A small warning box next to `RosterComposition` (which itself renders `null` on basketball) in
+`TopStuff.tsx`, reusing `countTopPositionGroups` server-side. `src/worker/views/roster.ts` computes
+`t2.rosterBalance` only when `positionalDepthTax` is on and the season being viewed is the current
+one (this is a "your active roster" readout, not historical). Renders nothing if there's no gap.
+
+### Key files
+
+| File                                          | Role                                                                                      |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `src/common/types.ts`                         | `GameAttributesLeague.positionalDepthTax`                                                 |
+| `src/common/defaultGameAttributes.ts`         | Registers the attribute for basketball, default `false`                                   |
+| `src/ui/views/Settings/settings.tsx`          | "Positional Depth Tax" toggle under Challenge Modes                                       |
+| `src/worker/core/team/positionalDepthTax.ts`  | Shared position-group + tax-computation helpers                                           |
+| `src/worker/core/game/loadTeams.ts`           | `processTeam` computes `t.depthTax`, gated on the attribute                               |
+| `src/worker/core/GameSim.basketball/index.ts` | `TeamGameSim.depthTax` type; applies it in `updateTeamCompositeRatings` and `getShotInfo` |
+| `src/worker/core/freeAgents/getBest.ts`       | Basketball position-group need check for FA signing                                       |
+| `src/worker/core/team/checkRosterSizes.ts`    | Protects last healthy big/guard from `dropPlayers`                                        |
+| `src/worker/views/roster.ts`                  | Computes `t2.rosterBalance` for the UI                                                    |
+| `src/ui/views/Roster/RosterBalance.tsx`       | Warning box rendered in `TopStuff.tsx`                                                    |
+
+### Future phases
+
+Phases 3–5 (scheme fit, team chemistry, in-series AI adjustments) are planned but not yet built —
+see `CHALLENGE_FEATURES_PLAN.md`. Phase 3 depends on Phase 1's sliders and reuses this phase's
+`processTeam` scalar pattern.
+
+---
+
 ## Key Concepts / Gotchas
 
 - **Rating keys**: `tp` = three-point shooting, `fg` = mid-range, `ft` = free throw, `ins` = inside scoring, `dnk` = dunking, `diq` = defensive IQ, `oiq` = offensive IQ, `pss` = passing, `drb` = dribbling, `reb` = rebounding, `stre` = strength, `spd` = speed, `jmp` = jumping, `endu` = endurance
