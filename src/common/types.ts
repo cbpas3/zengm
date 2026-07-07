@@ -750,6 +750,7 @@ export type GameAttributesLeague = {
 	rpdPot: boolean;
 	positionalDepthTax: boolean;
 	schemeFit: boolean;
+	teamChemistry: boolean;
 	currencyFormat: [string, "." | ",", string];
 	overtimeLength: number;
 	overtimeLengthPlayoffs: number | null;
@@ -1810,6 +1811,13 @@ export type TeamSeasonWithoutKey = {
 
 	// Only used in historical leagues when realStats="all"
 	srID?: string;
+
+	// Basketball-only, optional because no upgrade and only tracked when teamChemistry game
+	// attribute is on. 0-100, neutral 50. Drifts daily toward a target based on recent results,
+	// star density, and in-season trade churn (see worker/core/team/updateChemistry.ts); reseeded
+	// each season rollover from a fraction of last season's value, discounted by offseason roster
+	// turnover (see newPhasePreseason.ts).
+	chemistry?: number;
 };
 
 export type TeamSeason = TeamSeasonWithoutKey & {

@@ -412,6 +412,7 @@ export const getDefaultSettings = () => {
 			"positionalDepthTax",
 		),
 		schemeFit: unwrapGameAttribute(defaultGameAttributes, "schemeFit"),
+		teamChemistry: unwrapGameAttribute(defaultGameAttributes, "teamChemistry"),
 		saveOldBoxScores: unwrapGameAttribute(
 			defaultGameAttributes,
 			"saveOldBoxScores",

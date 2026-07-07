@@ -127,6 +127,7 @@ type TeamGameSim = {
 		atRim: number;
 		lowPost: number;
 	};
+	chemistry?: number;
 };
 
 type PossessionOutcome =
@@ -1362,6 +1363,21 @@ class GameSim extends GameSimBase {
 				this.team[t].compositeRating.defense *= depthTax.overall;
 				this.team[t].compositeRating.defensePerimeter *= depthTax.overall;
 				this.team[t].compositeRating.blocking *= depthTax.overall;
+			}
+
+			// Team chemistry: continuity + recent form + star-density friction, ±5% swing (see
+			// worker/core/team/updateChemistry.ts). Full swing on offense - dribbling/passing,
+			// where synergy.off was just folded in above - and half swing on defense. A
+			// tiebreaker between similarly-talented teams, not a talent replacement.
+			const chemistry = this.team[t].chemistry;
+			if (chemistry !== undefined) {
+				this.team[t].compositeRating.dribbling *= chemistry;
+				this.team[t].compositeRating.passing *= chemistry;
+
+				const chemistryDef = 1 + (chemistry - 1) * 0.5;
+				this.team[t].compositeRating.defense *= chemistryDef;
+				this.team[t].compositeRating.defensePerimeter *= chemistryDef;
+				this.team[t].compositeRating.blocking *= chemistryDef;
 			}
 		}
 	}

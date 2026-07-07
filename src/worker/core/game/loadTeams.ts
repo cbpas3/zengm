@@ -128,6 +128,7 @@ export const processTeam = async (
 		otl: number;
 		cid: number;
 		did: number;
+		chemistry?: number;
 	},
 	players: Player<MinimalPlayerRatings>[],
 	exhibitionGame?: boolean,
@@ -433,6 +434,12 @@ export const processTeam = async (
 				rimAttack: teamInput.gamePlan?.rimAttack ?? 50,
 				postPlay: teamInput.gamePlan?.postPlay ?? 50,
 			});
+		}
+
+		// Team chemistry: a stored, slowly-drifting per-team value (see
+		// worker/core/team/updateChemistry.ts) mapped to a small ±5% multiplier.
+		if (g.get("teamChemistry")) {
+			t.chemistry = 0.95 + ((teamSeason.chemistry ?? 50) / 100) * 0.1;
 		}
 	}
 

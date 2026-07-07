@@ -30,6 +30,7 @@ import type {
 import { groupByUnique, maxBy } from "../../../common/utils.ts";
 import { applyRealTeamInfo } from "../../../common/applyRealTeamInfo.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
+import { seedSeasonChemistry } from "../team/updateChemistry.ts";
 
 const newPhasePreseason = async (
 	conditions: Conditions,
@@ -509,6 +510,47 @@ const newPhasePreseason = async (
 
 	for (const p of players) {
 		await idb.cache.players.put(p);
+	}
+
+	// Team chemistry: seed each team's new-season value from a fraction of last season's ending
+	// value, discounted by offseason roster turnover. Player tids are finalized above (including
+	// the forceHistoricalRosters reassignment loop), so this must run after that, not alongside
+	// the initial genSeasonRow loop earlier in this function.
+	if (isSport("basketball") && g.get("teamChemistry")) {
+		const playersByTid = Map.groupBy(
+			players.filter((p) => p.tid >= 0),
+			(p) => p.tid,
+		);
+		for (const t of activeTeams) {
+			const newTeamSeason = await idb.cache.teamSeasons.indexGet(
+				"teamSeasonsByTidSeason",
+				[t.tid, newSeason],
+			);
+			if (!newTeamSeason) {
+				continue;
+			}
+
+			const prevTeamSeason = await idb.cache.teamSeasons.indexGet(
+				"teamSeasonsByTidSeason",
+				[t.tid, newSeason - 1],
+			);
+
+			const roster = playersByTid.get(t.tid) ?? [];
+			const continuityFraction =
+				roster.length === 0
+					? 0
+					: roster.filter((p) =>
+							p.stats.some(
+								(row: any) => row.season === newSeason - 1 && row.tid === t.tid,
+							),
+						).length / roster.length;
+
+			newTeamSeason.chemistry = seedSeasonChemistry(
+				prevTeamSeason?.chemistry,
+				continuityFraction,
+			);
+			await idb.cache.teamSeasons.put(newTeamSeason);
+		}
 	}
 
 	await realRosters.checkDisableForceHistoricalRosters(

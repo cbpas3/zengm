@@ -164,6 +164,7 @@ export type Key =
 	| "rpdPot"
 	| "positionalDepthTax"
 	| "schemeFit"
+	| "teamChemistry"
 	| "saveOldBoxScores"
 	| "currencyFormat"
 	| "overtimeLength"

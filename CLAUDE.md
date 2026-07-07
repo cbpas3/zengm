@@ -374,7 +374,7 @@ one (this is a "your active roster" readout, not historical). Renders nothing if
 
 ### Future phases
 
-Phases 4–5 (team chemistry, in-series AI adjustments) are planned but not yet built — see
+Phase 5 (in-series AI adjustments) is planned but not yet built — see
 `CHALLENGE_FEATURES_PLAN.md`.
 
 ---
@@ -449,8 +449,99 @@ not plan-driven shot selection).
 
 ### Future phases
 
-Phases 4–5 (team chemistry, in-series AI adjustments) are planned but not yet built — see
+Phase 5 (in-series AI adjustments) is planned but not yet built — see
 `CHALLENGE_FEATURES_PLAN.md`.
+
+---
+
+## Feature 7: Team Chemistry (Harder RPD Challenge, Phase 4)
+
+### What it does
+
+A stored, slowly-drifting per-team value (0–100, neutral 50) that rewards continuity and recent
+winning, and punishes stacking high-usage stars or churning the roster — so a superteam assembled
+overnight underperforms until it gels, and blowing up a roster every offseason has a cost. Gated
+behind the `teamChemistry` game attribute (default `false`); a neutral no-op (`chemistry` stays
+`undefined`, treated as 50) when off. Applies to **every** team, user and AI alike, same as
+positional-depth tax and scheme fit — `processTeam` reads whatever is stored on that team's
+`teamSeason`, no branch on `userTids`.
+
+### Storage
+
+`TeamSeason.chemistry?: number` (`src/common/types.ts`) — optional, so no migration needed, same
+approach as `Team.gamePlan`.
+
+### Update loop (`src/worker/core/team/updateChemistry.ts`)
+
+Two update points:
+
+- **Per-game drift** — `updateTeamChemistry(teamSeason, players)`, called once per team per game
+  from `writeTeamStats.ts` (right after the win/loss/streak block is updated, so `streak` is
+  current; runs in the regular season **and** playoffs, since `writeTeamStats` itself isn't
+  phase-gated). Drifts `teamSeason.chemistry` toward a `computeChemistryTarget` value by
+  `CHEMISTRY_DRIFT_RATE` (0.03/game, ~a month of games to converge):
+  - **Recent results**: `teamSeason.streak` (win streak up, losing streak down), capped at ±15.
+  - **Star density** ("can't just stack stars" lever): counts healthy players with `value ≥ 75`
+    (same 0–100 scale as ovr/pot); the first two are free, each additional star costs 4, capped at
+    a 20-point penalty.
+  - **In-season churn**: reuses `teamSeason.numPlayersTradedAway` (already tracked, sigmoid-weighted
+    by trade value — see `processTrade.ts`) rather than re-deriving roster overlap, capped at a
+    20-point penalty.
+- **Season-rollover seed** — `seedSeasonChemistry(prevChemistry, continuityFraction)`, called once
+  per team from `newPhasePreseason.ts`, **after** the players array's `tid`s are fully finalized
+  for the new season (including the `forceHistoricalRosters` reassignment loop — this must run
+  after that, not alongside the per-team `genSeasonRow` loop earlier in the same function, or
+  continuity would be computed against not-yet-final rosters). `continuityFraction` is the share of
+  the new season's opening roster (by headcount) whose `p.stats` already has a row with
+  `season === newSeason - 1` and `tid` equal to their current team — i.e. "played for this team last
+  season," read straight off in-memory player objects with no extra DB query. Even at full
+  continuity there's some natural offseason regression toward neutral
+  (`OFFSEASON_RETENTION = 0.8`); zero continuity resets to neutral outright. First-ever season for a
+  team (no `prevChemistry`) seeds at neutral 50.
+
+### Apply (`processTeam` → `GameSim.basketball`)
+
+```
+t.chemistry = 0.95 + (teamSeason.chemistry / 100) * 0.10   // [0.95, 1.05], ±5%
+```
+
+computed in `processTeam` (`loadTeams.ts`) when `g.get("teamChemistry")` is on, falling back to the
+neutral 50 when `teamSeason.chemistry` is unset (e.g. All-Star games, or a save that just enabled
+the toggle). Applied in `updateTeamCompositeRatings` (`GameSim.basketball/index.ts`), right after
+the positional-depth tax, at **full** swing on offense (`dribbling`, `passing` — the same ratings
+`synergy.off` was just folded into) and **half** swing on defense (`defense`, `defensePerimeter`,
+`blocking`, via `1 + (chemistry - 1) * 0.5`) — a tiebreaker between similarly-talented teams, not a
+talent replacement.
+
+### UI
+
+`ChemistryMeter.tsx` — a small labeled progress bar ("Gelling" ≥65, "Discord" ≤35, else "Neutral"),
+rendered in `TopStuff.tsx` next to the MOV/Age row. Reads `t.seasonAttrs.chemistry`, added to the
+`seasonAttrs` list in `src/worker/views/roster.ts`; renders `null` and is skipped entirely when
+`chemistry` is `undefined` (toggle off, or a sport/build where it was never tracked), so no separate
+UI flag needs to be threaded through. Shown for historical seasons too, not just the current one
+(unlike `RosterBalance`, which is scoped to "your active roster right now").
+
+### Key files
+
+| File                                          | Role                                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------------ |
+| `src/common/types.ts`                         | `GameAttributesLeague.teamChemistry`; `TeamSeason.chemistry`             |
+| `src/common/defaultGameAttributes.ts`         | Registers the attribute for basketball, default `false`                  |
+| `src/ui/views/Settings/settings.tsx`          | "Team Chemistry" toggle under Challenge Modes                            |
+| `src/worker/views/newLeague.ts`               | Default value plumbed into `NewLeagueSettings`                           |
+| `src/worker/core/team/updateChemistry.ts`     | `computeChemistryTarget`, `updateTeamChemistry`, `seedSeasonChemistry`   |
+| `src/worker/core/game/writeTeamStats.ts`      | Calls `updateTeamChemistry` once per team per game                       |
+| `src/worker/core/phase/newPhasePreseason.ts`  | Calls `seedSeasonChemistry` once per team at season rollover             |
+| `src/worker/core/game/loadTeams.ts`           | `processTeam` computes `t.chemistry`, gated on the attribute             |
+| `src/worker/core/GameSim.basketball/index.ts` | `TeamGameSim.chemistry` type; applies it in `updateTeamCompositeRatings` |
+| `src/worker/views/roster.ts`                  | Adds `"chemistry"` to the `seasonAttrs` list                             |
+| `src/ui/views/Roster/ChemistryMeter.tsx`      | The meter component                                                      |
+| `src/ui/views/Roster/TopStuff.tsx`            | Renders `ChemistryMeter`                                                 |
+
+### Future phases
+
+Phase 5 (in-series AI adjustments) is planned but not yet built — see `CHALLENGE_FEATURES_PLAN.md`.
 
 ---
 

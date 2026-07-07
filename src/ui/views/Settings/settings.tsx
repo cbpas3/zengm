@@ -1368,6 +1368,14 @@ export const settings: Setting[] = (
 		},
 		{
 			category: "Challenge Modes",
+			key: "teamChemistry",
+			name: "Team Chemistry",
+			type: "bool",
+			description:
+				"Teams build a slowly-drifting chemistry level based on continuity, recent results, and how many high-usage stars are competing for touches. Low chemistry (a superteam assembled overnight, or a roster blown up every offseason) hurts offense and, to a lesser extent, defense; high chemistry gives a small boost. Applies to every team, not just yours.",
+		},
+		{
+			category: "Challenge Modes",
 			key: "challengeSisyphusMode",
 			name: "Sisyphus Mode",
 			type: "bool",

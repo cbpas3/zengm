@@ -143,6 +143,7 @@ const updateRoster = async (
 			"name",
 			"avgAge",
 			"note",
+			"chemistry",
 		];
 		const t = await idb.getCopy.teamsPlus(
 			{

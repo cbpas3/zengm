@@ -12,6 +12,7 @@ import { levelToAmount } from "../../../common/budgetLevels.ts";
 import getWinner from "../../../common/getWinner.ts";
 import { getAdjustedTicketPrice } from "../../../common/getAdjustedTicketPrice.ts";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
+import { updateTeamChemistry } from "../team/updateChemistry.ts";
 
 const writeTeamStats = async (results: GameResults) => {
 	const allStarGame = results.team[0].id === -1 && results.team[1].id === -2;
@@ -445,6 +446,14 @@ const writeTeamStats = async (results: GameResults) => {
 
 			teamSeason.lastTen.unshift(-1);
 			teamSeason.streak = 0;
+		}
+
+		if (isSport("basketball") && g.get("teamChemistry")) {
+			const chemistryPlayers = await idb.cache.players.indexGetAll(
+				"playersByTid",
+				teamSeason.tid,
+			);
+			updateTeamChemistry(teamSeason, chemistryPlayers);
 		}
 
 		if (teamSeason.ovrStart === undefined) {

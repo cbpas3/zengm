@@ -7,6 +7,7 @@ import InstructionsAndSortButtons from "./InstructionsAndSortButtons.tsx";
 import PlayThroughInjurySliders from "./PlayThroughInjuriesSliders.tsx";
 import GamePlanEditor from "./GamePlanEditor.tsx";
 import RosterBalance from "./RosterBalance.tsx";
+import ChemistryMeter from "./ChemistryMeter.tsx";
 import type { View } from "../../../common/types.ts";
 import { bySport } from "../../../common/sportFunctions.ts";
 import Note from "../Player/Note.tsx";
@@ -293,6 +294,11 @@ const TopStuff = ({
 									: {t.seasonAttrs.avgAge?.toFixed(1)}
 								</div>
 							</div>
+							{t.seasonAttrs.chemistry !== undefined ? (
+								<div className="mt-2">
+									<ChemistryMeter chemistry={t.seasonAttrs.chemistry} />
+								</div>
+							) : null}
 						</div>
 
 						{isCurrentSeason ? (
