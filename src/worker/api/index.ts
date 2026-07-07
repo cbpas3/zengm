@@ -2408,12 +2408,16 @@ const generateSeasonStory = async ({
 	tid: number;
 	season: number;
 }) => {
-	const article = await generateSeasonStoryArticle(tid, season);
-	if (!article) {
-		return { article: null, usedFallback: true };
+	const result = await generateSeasonStoryArticle(tid, season);
+	if (!result.article) {
+		return {
+			article: null,
+			usedFallback: true,
+			rateLimited: result.errorReason === "rate_limited",
+		};
 	}
 
-	return { article, usedFallback: false };
+	return { article: result.article, usedFallback: false, rateLimited: false };
 };
 
 const ping = async () => {

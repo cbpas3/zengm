@@ -177,7 +177,9 @@ One team's one season, told as a story — identity, turning point, how it ended
 
 `callGemini` was extended to accept `thinkingLevel`, `maxOutputTokens`, and `timeoutMs` in its options (previously hardcoded to `"low"` / `8192` / `20000`).
 
-**Timeout/retry:** this feature's two prompts (full ground-truth block + a long-form prose ask) run close enough to the default 20s abort that a single slow/cold-start response would trip the fallback banner and force the user to click twice. Both passes now use `timeoutMs: 30000` and go through `callGeminiWithRetry` (one silent retry on a `null` result) instead of a bare `callGemini` call — scoped to this feature only, not the shared `callGemini` default, since a trade veto/offer call is small enough that 20s was never the bottleneck there.
+**Timeout/retry:** this feature's two prompts (full ground-truth block + a long-form prose ask) run close enough to the default 20s abort that a single slow/cold-start response would trip the fallback banner and force the user to click twice. Both passes now use `timeoutMs: 30000` and go through `callGeminiWithRetry` (one silent retry on a `null` result) instead of a bare `callGemini` call — scoped to this feature only, not the shared `callGemini` default, since a trade veto/offer call is small enough that 20s was never the bottleneck there. Note this doubles worst-case Gemini calls per click (up to 4 instead of 2) — worth revisiting if free-tier quota cost becomes a concern.
+
+**Error differentiation (rate limit vs. everything else):** `callGemini` takes an optional `onError?: (info: { status?: number; body?: string }) => void` so a caller can inspect _why_ a call failed without changing its `string | null` return contract for other callers (trade veto/offers/game recap are unaffected). `callGeminiWithRetry` uses this to detect HTTP 429 (free-tier rate limit) specifically; `generateSeasonStoryArticle` now returns `{ article, errorReason?: "rate_limited" | "other" }` instead of a bare string, threaded through `generateSeasonStory`'s `rateLimited` field to `SeasonStory.tsx`, which shows a distinct "rate limit hit, wait a minute" message instead of the generic "check your API key" banner when that's the actual cause.
 
 ### Key files (3b)
 
@@ -192,7 +194,7 @@ One team's one season, told as a story — identity, turning point, how it ended
 ### Return shape from `generateSeasonStory`
 
 ```typescript
-{ article: string | null, usedFallback: boolean }
+{ article: string | null, usedFallback: boolean, rateLimited: boolean }
 ```
 
 ### Scope

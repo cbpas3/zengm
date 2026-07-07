@@ -139,6 +139,7 @@ export const callGemini = async (
 		thinkingLevel?: "minimal" | "low" | "medium" | "high";
 		maxOutputTokens?: number;
 		timeoutMs?: number;
+		onError?: (info: { status?: number; body?: string }) => void;
 	},
 ): Promise<string | null> => {
 	console.log("[Gemini] callGemini: starting fetch");
@@ -174,6 +175,7 @@ export const callGemini = async (
 		if (!response.ok) {
 			const errText = await response.text().catch(() => "(unreadable)");
 			console.log("[Gemini] callGemini: error body", errText);
+			options?.onError?.({ status: response.status, body: errText });
 			return null;
 		}
 		const data = await response.json();
@@ -188,6 +190,7 @@ export const callGemini = async (
 		return text;
 	} catch (err) {
 		console.log("[Gemini] callGemini: caught error", String(err));
+		options?.onError?.({ body: String(err) });
 		return null;
 	} finally {
 		clearTimeout(timer);
@@ -390,34 +393,49 @@ type SeasonStoryOutline = {
 // (a full ground-truth text block, plus a long-form prose request), so they
 // run closer to the fetch timeout than a quick trade veto/offer call does.
 // One retry absorbs an occasional slow/cold-start response instead of
-// surfacing the fallback banner and making the user click again.
+// surfacing the fallback banner and making the user click again. Also tracks
+// whether the free-tier rate limit (HTTP 429) was the cause, so the caller
+// can show something more useful than a generic "unavailable" message.
 const callGeminiWithRetry = async (
 	apiKey: string,
 	prompt: string,
 	options: Parameters<typeof callGemini>[2],
-): Promise<string | null> => {
-	const first = await callGemini(apiKey, prompt, options);
+): Promise<{ text: string | null; rateLimited: boolean }> => {
+	let rateLimited = false;
+	const onError = (info: { status?: number }) => {
+		if (info.status === 429) {
+			rateLimited = true;
+		}
+	};
+
+	const first = await callGemini(apiKey, prompt, { ...options, onError });
 	if (first) {
-		return first;
+		return { text: first, rateLimited: false };
 	}
 
 	console.log("[Gemini] callGeminiWithRetry: first attempt failed, retrying");
-	return callGemini(apiKey, prompt, options);
+	const second = await callGemini(apiKey, prompt, { ...options, onError });
+	return { text: second, rateLimited };
+};
+
+export type SeasonStoryResult = {
+	article: string | null;
+	errorReason?: "rate_limited" | "other";
 };
 
 export const generateSeasonStoryArticle = async (
 	tid: number,
 	season: number,
-): Promise<string | null> => {
+): Promise<SeasonStoryResult> => {
 	const settings = await getGlobalSettings();
 	const apiKey = settings.geminiApiKey;
 	if (!apiKey) {
-		return null;
+		return { article: null, errorReason: "other" };
 	}
 
 	const groundTruth = await buildSeasonGroundTruth(tid, season);
 	if (!groundTruth) {
-		return null;
+		return { article: null, errorReason: "other" };
 	}
 
 	const factsText = formatGroundTruthText(groundTruth);
@@ -444,15 +462,18 @@ Respond ONLY with valid JSON, no markdown fences:
   ]
 }`;
 
-	const rawOutline = await callGeminiWithRetry(apiKey, outlinePrompt, {
+	const outlineResult = await callGeminiWithRetry(apiKey, outlinePrompt, {
 		temperature: 0.5,
 		timeoutMs: 30000,
 	});
-	if (!rawOutline) {
-		return null;
+	if (!outlineResult.text) {
+		return {
+			article: null,
+			errorReason: outlineResult.rateLimited ? "rate_limited" : "other",
+		};
 	}
 
-	const cleanedOutline = rawOutline
+	const cleanedOutline = outlineResult.text
 		.replace(/^```(?:json)?\s*/i, "")
 		.replace(/\s*```$/i, "")
 		.trim();
@@ -463,16 +484,16 @@ Respond ONLY with valid JSON, no markdown fences:
 	} catch {
 		const match = cleanedOutline.match(/{[\S\s]*}/);
 		if (!match) {
-			return null;
+			return { article: null, errorReason: "other" };
 		}
 		try {
 			outline = JSON.parse(match[0]);
 		} catch {
-			return null;
+			return { article: null, errorReason: "other" };
 		}
 	}
 	if (!outline || !Array.isArray(outline.beats) || outline.beats.length === 0) {
-		return null;
+		return { article: null, errorReason: "other" };
 	}
 
 	// Pass 2: prose, following the approved outline
@@ -507,20 +528,25 @@ Instructions:
 
 Write the retrospective now.`;
 
-	const rawArticle = await callGeminiWithRetry(apiKey, prosePrompt, {
+	const proseResult = await callGeminiWithRetry(apiKey, prosePrompt, {
 		temperature: 0.7,
 		thinkingLevel: "medium",
 		maxOutputTokens: 8192,
 		timeoutMs: 30000,
 	});
-	if (!rawArticle) {
-		return null;
+	if (!proseResult.text) {
+		return {
+			article: null,
+			errorReason: proseResult.rateLimited ? "rate_limited" : "other",
+		};
 	}
 
-	return rawArticle
-		.replace(/^```(?:\w+)?\s*/, "")
-		.replace(/\s*```$/, "")
-		.trim();
+	return {
+		article: proseResult.text
+			.replace(/^```(?:\w+)?\s*/, "")
+			.replace(/\s*```$/, "")
+			.trim(),
+	};
 };
 
 export default evaluateTrade;
