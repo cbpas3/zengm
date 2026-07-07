@@ -1,0 +1,3 @@
+[     651ms] [ERROR] The script has an unsupported MIME type ('text/html'). @ :0
+[     655ms] [WARNING] [bugsnag] Event not sent due to releaseStage/enabledReleaseStages configuration @ http://localhost:3000/gen/ui-chunk-lFesZGAS.js:8
+[     658ms] Failed to register a ServiceWorker for scope ('http://localhost:3000/') with script ('http://localhost:3000/sw.js'): The script has an unsupported MIME type ('text/html').

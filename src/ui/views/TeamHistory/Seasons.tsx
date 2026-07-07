@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { RecordAndPlayoffs } from "../../components/RecordAndPlayoffs.tsx";
 import type { View } from "../../../common/types.ts";
 import { useState } from "react";
+import SeasonStory from "./SeasonStory.tsx";
 
 const ExpandableNote = ({ note }: { note: string | undefined }) => {
 	const [expand, setExpand] = useState(false);
@@ -56,6 +57,8 @@ const Seasons = ({ history }: Pick<View<"teamHistory">, "history">) => {
 		// If a team was inactive for some number of seasons, add some vertical space in the gap
 		const gap = i > 0 && h.season + 1 < history[i - 1]!.season;
 
+		const hasPlayedGames = h.won + h.lost + (h.tied ?? 0) + (h.otl ?? 0) > 0;
+
 		return (
 			<div key={h.season} className={gap && !newName ? "mt-2" : undefined}>
 				{newName ? (
@@ -63,6 +66,7 @@ const Seasons = ({ history }: Pick<View<"teamHistory">, "history">) => {
 				) : null}
 				{recordAndPlayoffs}
 				<ExpandableNote note={h.note} />
+				{hasPlayedGames ? <SeasonStory tid={h.tid} season={h.season} /> : null}
 			</div>
 		);
 	});

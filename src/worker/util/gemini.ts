@@ -4,6 +4,10 @@ import getGlobalSettings from "./getGlobalSettings.ts";
 import isUntradable from "../core/trade/isUntradable.ts";
 import type { TradeTeams } from "../../common/types.ts";
 import { trade } from "../core/index.ts";
+import {
+	buildSeasonGroundTruth,
+	formatGroundTruthText,
+} from "./seasonGroundTruth.ts";
 
 // --- AI-to-AI trade veto ---
 
@@ -130,7 +134,11 @@ export type TradingBlockOffer = {
 export const callGemini = async (
 	apiKey: string,
 	prompt: string,
-	options?: { temperature?: number },
+	options?: {
+		temperature?: number;
+		thinkingLevel?: "minimal" | "low" | "medium" | "high";
+		maxOutputTokens?: number;
+	},
 ): Promise<string | null> => {
 	console.log("[Gemini] callGemini: starting fetch");
 	const controller = new AbortController();
@@ -148,8 +156,10 @@ export const callGemini = async (
 						// gemini-3.5-flash thinks by default (medium); thinking tokens
 						// draw from maxOutputTokens. Budget generously for thinking +
 						// the ~1.2k-token JSON, and keep thinking low for latency.
-						maxOutputTokens: 8192,
-						thinkingConfig: { thinkingLevel: "low" },
+						maxOutputTokens: options?.maxOutputTokens ?? 8192,
+						thinkingConfig: {
+							thinkingLevel: options?.thinkingLevel ?? "low",
+						},
 					},
 				}),
 				signal: controller.signal,
@@ -362,6 +372,118 @@ Respond ONLY with valid JSON, no markdown fences:
 	}
 
 	return results.length > 0 ? results : null;
+};
+
+// --- Season retrospective (two-pass: outline, then prose) ---
+
+type SeasonStoryOutline = {
+	title: string;
+	angle: string;
+	beats: { when: string; what: string; why_it_mattered: string }[];
+};
+
+export const generateSeasonStoryArticle = async (
+	tid: number,
+	season: number,
+): Promise<string | null> => {
+	const settings = await getGlobalSettings();
+	const apiKey = settings.geminiApiKey;
+	if (!apiKey) {
+		return null;
+	}
+
+	const groundTruth = await buildSeasonGroundTruth(tid, season);
+	if (!groundTruth) {
+		return null;
+	}
+
+	const factsText = formatGroundTruthText(groundTruth);
+
+	// Pass 1: outline
+	const outlinePrompt = `You are a veteran NBA beat writer planning a season retrospective for the ${groundTruth.teamName} covering the ${season} NBA season, for the team's hometown newspaper.
+
+GROUND TRUTH — the only facts you may use. Do not invent or assume anything beyond this:
+${factsText}
+
+Based ONLY on the facts above, identify the season's narrative through-line and 4-6 chronological beats that tell its story: the setup, the turning point, the climax, and how it ended.
+
+Respond ONLY with valid JSON, no markdown fences:
+{
+  "title": "a short, punchy headline for this retrospective",
+  "angle": "one sentence describing the through-line of the season",
+  "beats": [
+    { "when": "roughly when in the season this happened", "what": "what happened, using exact facts from above", "why_it_mattered": "why this was a turning point or important beat" }
+  ]
+}`;
+
+	const rawOutline = await callGemini(apiKey, outlinePrompt, {
+		temperature: 0.5,
+	});
+	if (!rawOutline) {
+		return null;
+	}
+
+	const cleanedOutline = rawOutline
+		.replace(/^```(?:json)?\s*/i, "")
+		.replace(/\s*```$/i, "")
+		.trim();
+
+	let outline: SeasonStoryOutline;
+	try {
+		outline = JSON.parse(cleanedOutline);
+	} catch {
+		const match = cleanedOutline.match(/{[\S\s]*}/);
+		if (!match) {
+			return null;
+		}
+		try {
+			outline = JSON.parse(match[0]);
+		} catch {
+			return null;
+		}
+	}
+	if (!outline || !Array.isArray(outline.beats) || outline.beats.length === 0) {
+		return null;
+	}
+
+	// Pass 2: prose, following the approved outline
+	const beatsText = outline.beats
+		.map((b, i) => `${i + 1}. ${b.when}: ${b.what} — ${b.why_it_mattered}`)
+		.join("\n");
+
+	const prosePrompt = `You are a veteran NBA beat writer writing a season retrospective for the ${groundTruth.teamName}, covering the ${season} NBA season, for the team's hometown newspaper.
+
+GROUND TRUTH — the only facts you may use. Do not invent or assume any score, stat, trade, or event not listed here:
+${factsText}
+
+APPROVED OUTLINE — follow this narrative arc, but write in flowing prose, not bullet points:
+Title: ${outline.title}
+Angle: ${outline.angle}
+Beats:
+${beatsText}
+
+Instructions:
+1. Write ONLY from the facts given above. Never invent a score, stat, quote, trade, or player not listed.
+2. 600-900 words, veteran beat-writer voice.
+3. Structure: setup → turning point → climax → resolution, following the beats above in order.
+4. Weave in the exact stats/records/scores given, without rounding or altering any numbers.
+5. Write in prose paragraphs separated by blank lines. No headers, no bullet points, no markdown formatting.
+
+Write the retrospective now.`;
+
+	const rawArticle = await callGemini(apiKey, prosePrompt, {
+		temperature: 0.7,
+		thinkingLevel: "medium",
+		maxOutputTokens: 8192,
+	});
+	if (!rawArticle) {
+		return null;
+	}
+
+	return rawArticle
+		.replace(/^```(?:\w+)?\s*/, "")
+		.replace(/\s*```$/, "")
+		.trim();
 };
 
 export default evaluateTrade;

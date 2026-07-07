@@ -1,0 +1,172 @@
+- generic [ref=e2]:
+    - navigation [ref=e3]:
+        - generic [ref=e4]:
+            - button "Toggle navigation" [ref=e5] [cursor=pointer]
+            - link "Basketball GM" [ref=e7] [cursor=pointer]:
+                - /url: /
+            - generic [ref=e9]:
+                - link "Leagues" [ref=e11] [cursor=pointer]:
+                    - /url: /
+                - link "New League" [ref=e13] [cursor=pointer]:
+                    - /url: /new_league
+                - link "Exhibition Game" [ref=e15] [cursor=pointer]:
+                    - /url: /exhibition
+                - button "Tools" [ref=e17] [cursor=pointer]
+                - button "Help" [ref=e19] [cursor=pointer]
+            - link "Login/Register" [ref=e22] [cursor=pointer]:
+                - /url: /account/login_or_register
+                - generic [ref=e23]: 
+                - text: Login/Register
+    - generic [ref=e24]:
+        - navigation "side navigation" [ref=e25]:
+            - generic [ref=e26]:
+                - list [ref=e27]:
+                    - listitem [ref=e28]:
+                        - link "Leagues" [ref=e29] [cursor=pointer]:
+                            - /url: /
+                - list [ref=e30]:
+                    - listitem [ref=e31]:
+                        - link "New League" [ref=e32] [cursor=pointer]:
+                            - /url: /new_league
+                - list [ref=e33]:
+                    - listitem [ref=e34]:
+                        - link "Exhibition Game" [ref=e35] [cursor=pointer]:
+                            - /url: /exhibition
+                - generic [ref=e36] [cursor=pointer]:
+                    - generic [ref=e37]: 
+                    - text: Tools
+                - list [ref=e38]:
+                    - listitem [ref=e39]:
+                        - link "Achievements" [ref=e40] [cursor=pointer]:
+                            - /url: /achievements
+                    - listitem [ref=e41]:
+                        - generic [ref=e42] [cursor=pointer]: Screenshot
+                    - listitem [ref=e43]:
+                        - generic [ref=e44] [cursor=pointer]: Delete All Leagues
+                    - listitem [ref=e45]:
+                        - link "Global Settings" [ref=e46] [cursor=pointer]:
+                            - /url: /settings
+                - generic [ref=e47] [cursor=pointer]:
+                    - generic [ref=e48]: 
+                    - text: Help
+                - list [ref=e49]:
+                    - listitem [ref=e50]:
+                        - link "Manual" [ref=e51] [cursor=pointer]:
+                            - /url: https://basketball-gm.com/manual/
+                    - listitem [ref=e52]:
+                        - link "Custom Rosters" [ref=e53] [cursor=pointer]:
+                            - /url: https://basketball-gm.com/manual/customization/
+                    - listitem [ref=e54]:
+                        - link "Debugging" [ref=e55] [cursor=pointer]:
+                            - /url: https://basketball-gm.com/manual/debugging/
+                    - listitem [ref=e56]:
+                        - link "Changelog" [ref=e57] [cursor=pointer]:
+                            - /url: https://zengm.com/changelog/
+        - generic [ref=e61]:
+            - main [ref=e62]:
+                - generic [ref=e63]:
+                    - link "New league » Real players" [ref=e64] [cursor=pointer]:
+                        - /url: /new_league/real
+                        - text: New league
+                        - text: » Real players
+                    - link "New league » Random players" [ref=e65] [cursor=pointer]:
+                        - /url: /new_league/random
+                        - text: New league
+                        - text: » Random players
+                    - link "New league » Cross-era" [ref=e66] [cursor=pointer]:
+                        - /url: /new_league/cross_era
+                        - text: New league
+                        - text: » Cross-era
+                    - link "New league » Legends" [ref=e67] [cursor=pointer]:
+                        - /url: /new_league/legends
+                        - text: New league
+                        - text: » Legends
+                    - link "New league » Custom" [ref=e68] [cursor=pointer]:
+                        - /url: /new_league
+                        - text: New league
+                        - text: » Custom
+                    - link "Exhibition game" [ref=e69] [cursor=pointer]:
+                        - /url: /exhibition
+                    - link "Try our other sports sim games!" [ref=e70] [cursor=pointer]:
+                        - /url: https://zengm.com/
+                        - text: Try our other sports sim
+                        - text: games!
+                - generic [ref=e72]:
+                    - generic [ref=e74]:
+                        - generic [ref=e76] [cursor=pointer]: 
+                        - generic "Filter" [ref=e77] [cursor=pointer]:
+                            - generic [ref=e78]: 
+                        - searchbox "Search" [ref=e79]
+                        - button "" [ref=e81] [cursor=pointer]:
+                            - generic [ref=e82]: 
+                    - table [ref=e84]:
+                        - rowgroup [ref=e85]:
+                            - 'row "League Team Phase # Seasons Difficulty Created Last Played" [ref=e86]':
+                                - columnheader [ref=e87] [cursor=pointer]
+                                - columnheader "League" [ref=e88] [cursor=pointer]
+                                - columnheader "Team" [ref=e89] [cursor=pointer]
+                                - columnheader "Phase" [ref=e90] [cursor=pointer]
+                                - columnheader "# Seasons" [ref=e91] [cursor=pointer]
+                                - columnheader "Difficulty" [ref=e92] [cursor=pointer]
+                                - columnheader "Created" [ref=e93] [cursor=pointer]
+                                - columnheader "Last Played" [ref=e94] [cursor=pointer]
+                                - columnheader [ref=e95] [cursor=pointer]
+                        - rowgroup [ref=e96]:
+                            - row "Play League 1  Atlanta Gold Club 2026 regular season 1 Normal 4 hours ago 4 hours ago " [ref=e97]:
+                                - cell "Play" [ref=e98]:
+                                    - link "Play" [ref=e99] [cursor=pointer]:
+                                        - /url: /l/1
+                                - cell "League 1 " [ref=e100]:
+                                    - generic [ref=e101]:
+                                        - link "League 1" [ref=e103] [cursor=pointer]:
+                                            - /url: /l/1
+                                        - generic "Star" [ref=e104] [cursor=pointer]: 
+                                - cell "Atlanta Gold Club" [ref=e105]:
+                                    - generic [ref=e106]:
+                                        - img [ref=e108]
+                                        - generic [ref=e109]: Atlanta Gold Club
+                                - cell "2026 regular season" [ref=e110]
+                                - cell "1" [ref=e111]
+                                - cell "Normal" [ref=e112]
+                                - cell "4 hours ago" [ref=e113]
+                                - cell "4 hours ago" [ref=e114]
+                                - cell "" [ref=e115]:
+                                    - generic "Actions" [ref=e117] [cursor=pointer]:
+                                        - generic [ref=e118]: 
+            - contentinfo [ref=e119]:
+                - paragraph
+                - separator [ref=e120]
+                - generic [ref=e121]:
+                    - generic [ref=e122]:
+                        - link "About" [ref=e124] [cursor=pointer]:
+                            - /url: https://zengm.com/about/
+                        - generic [ref=e125]:
+                            - text: ·
+                            - link "Blog" [ref=e126] [cursor=pointer]:
+                                - /url: https://zengm.com/blog/
+                        - generic [ref=e127]:
+                            - text: ·
+                            - link "Contact" [ref=e128] [cursor=pointer]:
+                                - /url: https://zengm.com/contact/
+                        - generic [ref=e129]:
+                            - text: ·
+                            - link "Privacy" [ref=e130] [cursor=pointer]:
+                                - /url: https://zengm.com/privacy/
+                        - generic [ref=e131]:
+                            - text: ·
+                            - link "GitHub" [ref=e132] [cursor=pointer]:
+                                - /url: https://github.com/zengm-games/zengm
+                        - generic [ref=e133]:
+                            - text: ·
+                            - link "Reddit" [ref=e134] [cursor=pointer]:
+                                - /url: https://www.reddit.com/r/BasketballGM/
+                        - generic [ref=e135]:
+                            - text: ·
+                            - link "Discord" [ref=e136] [cursor=pointer]:
+                                - /url: https://zengm.com/discord/
+                    - generic [ref=e137]:
+                        - text: BBGM
+                        - link "v2026.07.07.1069" [ref=e138] [cursor=pointer]:
+                            - /url: https://zengm.com/changelog/
+    - generic:
+        - list

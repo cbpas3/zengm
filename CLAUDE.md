@@ -10,6 +10,7 @@ ZenGM is an open-source sports management simulation. This fork adds:
 
 1. **Player Development System** — archetype-based training, breakthrough seasons, regression floors
 2. **Gemini AI Trade Engine** — Gemini Flash powers the trading block, acting as all opposing GMs
+3. **AI Article Generation** — Gemini-written game recaps ("Way 1") and team season retrospectives ("Way 3")
 
 ---
 
@@ -134,6 +135,60 @@ try {
     clearTimeout(timer);
 }
 ```
+
+---
+
+## Feature 3: AI Article Generation
+
+Two on-demand, ephemeral (render-don't-persist, nothing saved to the DB) long-form writing features. Both are built on the shared `callGemini` wrapper from Feature 2 and the same UI pattern: an `ActionButton` ("Generate ...") + a yellow fallback banner if Gemini is unavailable + a plain paragraph renderer.
+
+### 3a. Game Recap ("Way 1")
+
+One Gemini call per game. Writes a 3–5 paragraph recap from a single game's box score.
+
+- Worker: `generateGameArticle({ gid })` in `src/worker/api/index.ts`. Reuses `boxScore` from `src/worker/views/gameLog.ts` (exported specifically for this) as its data source — no separate DB queries.
+- UI: `GameRecap` component in `src/ui/views/GameLog.tsx`, "Generate recap" button under the box score.
+- Prompt persona: beat writer for the winning team's city.
+
+### 3b. Season Retrospective ("Way 3")
+
+One team's one season, told as a story — identity, turning point, how it ended — via **two sequential Gemini calls** instead of one. A season is dozens of games; getting a coherent arc (not a bulleted summary) out of it needs (1) aggregating to the right granularity in code and (2) planning the story before writing it.
+
+**Aggregation** — `buildSeasonGroundTruth(tid, season)` in `src/worker/util/seasonGroundTruth.ts` builds a compact ground-truth object from **season-level data**, which is always present regardless of box-score retention:
+
+- Final record, seed, and how the season ended (via `helpers.roundsWonText`), from `teamSeasons` + `playoffSeries`
+- Playoff series results, per round
+- Regular-season arc — longest win/loss streaks, up to 8 signature games (scored by opponent quality + margin + OT), and record by quarter of the season (chronological game order, since the sim doesn't track calendar months) — queried **opportunistically** from `idb.getCopies.games({ season })`; silently omitted (not an error) if box scores were pruned per `saveOldBoxScores.pastSeasons`
+- Team stat leaders (top 4 by pts) + that season's awards, via `playersPlus`
+- In-season trades, from `idb.getCopies.events({ season })` filtered to `type: "trade"`
+- Dev-system texture: breakthrough-caliber rating jumps (age ≤24, OVR delta ≥8 year-over-year) — **not** the live `devFocus`/`mentorPid` fields, since those aren't stored historically per season and only reliably describe the _current_ season
+
+**Two-pass generation** — `generateSeasonStoryArticle(tid, season)` in `gemini.ts`:
+
+1. **Outline pass** — ground truth → JSON `{ title, angle, beats: [{ when, what, why_it_mattered }] }` (4–6 beats), `thinkingLevel: "low"`
+2. **Prose pass** — ground truth + the approved outline → 600–900 word retrospective (setup → turning point → climax → resolution), `thinkingLevel: "medium"` for coherence over the longer arc
+
+`callGemini` was extended to accept `thinkingLevel` and `maxOutputTokens` in its options (previously hardcoded to `"low"` / `8192`).
+
+### Key files (3b)
+
+| File                                       | Role                                                                                |
+| ------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `src/worker/util/seasonGroundTruth.ts`     | `buildSeasonGroundTruth`, `formatGroundTruthText` — all the DB aggregation          |
+| `src/worker/util/gemini.ts`                | `generateSeasonStoryArticle` — the two Gemini passes                                |
+| `src/worker/api/index.ts`                  | `generateSeasonStory({ tid, season })` endpoint, modeled on `getTradingBlockOffers` |
+| `src/ui/views/TeamHistory/SeasonStory.tsx` | Button + loading state + fallback banner, one instance per season row               |
+| `src/ui/views/TeamHistory/Seasons.tsx`     | Renders `SeasonStory` under each season the team actually played games in           |
+
+### Return shape from `generateSeasonStory`
+
+```typescript
+{ article: string | null, usedFallback: boolean }
+```
+
+### Scope
+
+Ephemeral only — a saved archive needs a new league-DB object store + schema migration, deferred until narrative quality is proven. Multi-season/dynasty pieces, player-career pieces, and league-in-review are separate future phases reusing the same aggregation + two-pass machinery (the dynasty version is where box-score pruning across older seasons in the window matters most).
 
 ---
 

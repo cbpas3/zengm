@@ -163,7 +163,11 @@ import { getNumPlayersTradedAwayNormalizedAll } from "../core/player/getNumPlaye
 import { getAdjustedTicketPrice } from "../../common/getAdjustedTicketPrice.ts";
 import { gameAttributesArrayToObject } from "../../common/gameAttributesArrayToObject.ts";
 import { bySport, isSport } from "../../common/sportFunctions.ts";
-import { generateTradingBlockOffers, callGemini } from "../util/gemini.ts";
+import {
+	generateTradingBlockOffers,
+	callGemini,
+	generateSeasonStoryArticle,
+} from "../util/gemini.ts";
 import getGlobalSettings from "../util/getGlobalSettings.ts";
 import { boxScore as getGameBoxScore } from "../views/gameLog.ts";
 import { DEV_FOCUS_RATINGS } from "../core/player/developSeason.ts";
@@ -2393,6 +2397,21 @@ Write the recap now.`;
 		.replace(/^```(?:\w+)?\s*/, "")
 		.replace(/\s*```$/, "")
 		.trim();
+
+	return { article, usedFallback: false };
+};
+
+const generateSeasonStory = async ({
+	tid,
+	season,
+}: {
+	tid: number;
+	season: number;
+}) => {
+	const article = await generateSeasonStoryArticle(tid, season);
+	if (!article) {
+		return { article: null, usedFallback: true };
+	}
 
 	return { article, usedFallback: false };
 };
@@ -5355,6 +5374,7 @@ export default {
 		exportPlayerGamesCsv,
 		generateFace,
 		generateGameArticle,
+		generateSeasonStory,
 		getAutoPos,
 		getBornLoc,
 		getDefaultInjuries,
