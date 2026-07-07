@@ -11,6 +11,7 @@ ZenGM is an open-source sports management simulation. This fork adds:
 1. **Player Development System** — archetype-based training, breakthrough seasons, regression floors
 2. **Gemini AI Trade Engine** — Gemini Flash powers the trading block, acting as all opposing GMs
 3. **AI Article Generation** — Gemini-written game recaps ("Way 1") and team season retrospectives ("Way 3")
+4. **Game Plan (Harder RPD Challenge, Phase 1)** — expanded offense/defense sliders (no LLM calls) that make converting foreknowledge into a dynasty require actual roster/scheme decisions, not just stacking stars
 
 ---
 
@@ -189,6 +190,87 @@ One team's one season, told as a story — identity, turning point, how it ended
 ### Scope
 
 Ephemeral only — a saved archive needs a new league-DB object store + schema migration, deferred until narrative quality is proven. Multi-season/dynasty pieces, player-career pieces, and league-in-review are separate future phases reusing the same aggregation + two-pass machinery (the dynasty version is where box-score pruning across older seasons in the window matters most).
+
+---
+
+## Feature 4: Game Plan (Harder RPD Challenge, Phase 1)
+
+### What it does
+
+Part of a multi-phase plan (see `CHALLENGE_FEATURES_PLAN.md`) to make an RPD-100 / `rpdPot=false`
+save harder **without any Gemini/LLM calls**. The player still knows who becomes good; the
+difficulty comes from making it hard to _convert_ that foreknowledge into an unstoppable dynasty.
+Phase 1 expands the per-team `gamePlan` sliders from 5 (offense-only) to 11 (offense + a brand-new
+defense half), all still 0–100 with 50 = neutral/no-op. Applies to every team (user and AI alike) —
+`processTeam` just forwards whatever `gamePlan` is stored on the team, so AI teams get whatever the
+league's difficulty/AI logic sets for them.
+
+### Sliders
+
+**Offense** (pre-existing: `pace`, `threePointRate`, `postPlay`, `rimAttack`, `ballMovement`; new
+this phase: `transition`, `crashOffensiveGlass`):
+
+| Slider                | 0                            | 100                                 |
+| --------------------- | ---------------------------- | ----------------------------------- |
+| `transition`          | Walk it up in the half court | Push every miss/make                |
+| `crashOffensiveGlass` | Get back on D                | Send bodies to the offensive boards |
+
+**Defense** (all new — the sim previously had no defensive plan at all):
+
+| Slider              | 0                     | 100                     |
+| ------------------- | --------------------- | ----------------------- |
+| `pickCoverage`      | Drop/conservative     | Switch/blitz everything |
+| `perimeterPressure` | Sag off               | Pressure the ball       |
+| `helpAggression`    | Stay home on shooters | Collapse on drives      |
+| `defensiveGlass`    | Leak out for offense  | Crash defensive boards  |
+
+### Sim wiring (`GameSim.basketball/index.ts`)
+
+- **`transition`**: in `getPossessionOutcome`, a make or a defensive rebound is a transition
+  opportunity; whether it actually becomes a fast break is a coin flip scaled by
+  `0.5 + transition/100`. A fast break shrinks the frontcourt-advance `dt` (ball pushed upcourt
+  fast) and, in `getShotInfo`, multiplies the at-rim shot-selection term by `1.4`.
+- **`crashOffensiveGlass`**: in `doReb`, scales the offense's rebound weight by `0.7 + crash/100 *
+0.6`. Cost: if the shot is missed and the defense gets the drb anyway, that drb'ing team is now
+  on offense next possession and gets a bonus fast-break chance proportional to how hard its
+  _opponent_ (the team that just crashed) had `crashOffensiveGlass` set — poor floor balance leaking
+  out in transition against them.
+- **`pickCoverage`** (read from the _defending_ team): dampens the offense's `usagePower` (blunts
+  star-heavy ISO ball), reduces at-rim/low-post `probMake` by up to 10%, and raises three-point
+  shot-selection frequency slightly (kick-outs off a switch).
+- **`perimeterPressure`** (defending team): raises `probTov` and the non-shooting foul roll by up
+  to 15%; costs the defending team a rebounding penalty (out of position) applied in `doReb`.
+- **`helpAggression`** (defending team): cuts at-rim `probMake` by up to 12%, raises three-point
+  shot-selection frequency and three-point `probMake` (open kick-out threes) by up to 8–10%.
+- **`defensiveGlass`** (defending team): mirrors `crashOffensiveGlass` in `doReb`, scaling the
+  defense's rebound weight by `0.7 + defensiveGlass/100 * 0.6`.
+
+All defense-slider effects are read via `this.team[this.d].gamePlan` (i.e. they modify the
+_opponent's_ offense while a team is on defense). Every effect no-ops at 50 and when
+`gamePlan === undefined` or a field is missing — old saves with only the original 5 offense keys
+still simulate correctly (`?? 50` default on every new field read).
+
+### UI (`GamePlanEditor.tsx`)
+
+Sliders are now split into "Offense" and "Defense" subheadings. `DEFAULT_GAME_PLAN` has all 11 keys
+at 50; on mount the editor merges `{ ...DEFAULT_GAME_PLAN, ...t.gamePlan }` so a team with an
+old 5-key `gamePlan` in the DB doesn't render `undefined`/`NaN` sliders for the new fields.
+
+### Key files
+
+| File                                          | Role                                                                                                               |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `src/common/types.ts`                         | `Team.gamePlan` — all 11 fields                                                                                    |
+| `src/worker/core/game/loadTeams.ts`           | `processTeam` `teamInput.gamePlan` type; forwards to `t.gamePlan` unchanged                                        |
+| `src/worker/core/GameSim.basketball/index.ts` | `TeamGameSim.gamePlan` type + all sim wiring (`getPossessionOutcome`, `getShotInfo`, `doShot`, `probTov`, `doReb`) |
+| `src/worker/api/index.ts`                     | `updateGamePlan` param type                                                                                        |
+| `src/ui/views/Roster/GamePlanEditor.tsx`      | `GamePlan` type, `DEFAULT_GAME_PLAN`, `OFFENSE_SLIDER_CONFIG` / `DEFENSE_SLIDER_CONFIG`                            |
+
+### Future phases
+
+Phases 2–5 (positional-depth tax, scheme fit, team chemistry, in-series AI adjustments) are planned
+but not yet built — see `CHALLENGE_FEATURES_PLAN.md`. Phase 3 (scheme fit) and Phase 5 (in-series AI
+adjustments) both depend on the sliders added here.
 
 ---
 

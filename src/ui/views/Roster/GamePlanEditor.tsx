@@ -4,11 +4,20 @@ import { AnimatePresence, m } from "framer-motion";
 import { toWorker } from "../../util/toWorker.ts";
 
 type GamePlan = {
+	// Offense
 	pace: number;
 	threePointRate: number;
 	postPlay: number;
 	rimAttack: number;
 	ballMovement: number;
+	transition: number;
+	crashOffensiveGlass: number;
+
+	// Defense
+	pickCoverage: number;
+	perimeterPressure: number;
+	helpAggression: number;
+	defensiveGlass: number;
 };
 
 const DEFAULT_GAME_PLAN: GamePlan = {
@@ -17,14 +26,22 @@ const DEFAULT_GAME_PLAN: GamePlan = {
 	postPlay: 50,
 	rimAttack: 50,
 	ballMovement: 50,
+	transition: 50,
+	crashOffensiveGlass: 50,
+	pickCoverage: 50,
+	perimeterPressure: 50,
+	helpAggression: 50,
+	defensiveGlass: 50,
 };
 
-const SLIDER_CONFIG: {
+type SliderConfig = {
 	key: keyof GamePlan;
 	label: string;
 	minLabel: string;
 	maxLabel: string;
-}[] = [
+};
+
+const OFFENSE_SLIDER_CONFIG: SliderConfig[] = [
 	{
 		key: "pace",
 		label: "Pace",
@@ -55,6 +72,45 @@ const SLIDER_CONFIG: {
 		minLabel: "ISO / star ball",
 		maxLabel: "Distribute evenly",
 	},
+	{
+		key: "transition",
+		label: "Transition",
+		minLabel: "Walk it up",
+		maxLabel: "Push every miss/make",
+	},
+	{
+		key: "crashOffensiveGlass",
+		label: "Crash Offensive Glass",
+		minLabel: "Get back on D",
+		maxLabel: "Send bodies to the boards",
+	},
+];
+
+const DEFENSE_SLIDER_CONFIG: SliderConfig[] = [
+	{
+		key: "pickCoverage",
+		label: "Pick Coverage",
+		minLabel: "Drop coverage",
+		maxLabel: "Switch everything",
+	},
+	{
+		key: "perimeterPressure",
+		label: "Perimeter Pressure",
+		minLabel: "Sag off",
+		maxLabel: "Pressure the ball",
+	},
+	{
+		key: "helpAggression",
+		label: "Help Aggression",
+		minLabel: "Stay home on shooters",
+		maxLabel: "Collapse on drives",
+	},
+	{
+		key: "defensiveGlass",
+		label: "Defensive Glass",
+		minLabel: "Leak out for offense",
+		maxLabel: "Crash defensive boards",
+	},
 ];
 
 const GamePlanSlider = ({
@@ -62,7 +118,7 @@ const GamePlanSlider = ({
 	value,
 	onChange,
 }: {
-	config: (typeof SLIDER_CONFIG)[number];
+	config: SliderConfig;
 	value: number;
 	onChange: (key: keyof GamePlan, value: number) => void;
 }) => {
@@ -109,9 +165,10 @@ const GamePlanEditor = ({
 	};
 }) => {
 	const [expanded, setExpanded] = useState(!window.mobile);
-	const [gamePlan, setGamePlan] = useState<GamePlan>(
-		t.gamePlan ?? DEFAULT_GAME_PLAN,
-	);
+	const [gamePlan, setGamePlan] = useState<GamePlan>({
+		...DEFAULT_GAME_PLAN,
+		...t.gamePlan,
+	});
 
 	const handleChange = async (key: keyof GamePlan, value: number) => {
 		const updated = { ...gamePlan, [key]: value };
@@ -147,7 +204,27 @@ const GamePlanEditor = ({
 						}}
 						transition={{ duration: 0.3, type: "tween" }}
 					>
-						{SLIDER_CONFIG.map((config) => (
+						<div
+							className="text-body-secondary text-uppercase fw-bold mb-1"
+							style={{ fontSize: "0.7rem" }}
+						>
+							Offense
+						</div>
+						{OFFENSE_SLIDER_CONFIG.map((config) => (
+							<GamePlanSlider
+								key={config.key}
+								config={config}
+								value={gamePlan[config.key]}
+								onChange={handleChange}
+							/>
+						))}
+						<div
+							className="text-body-secondary text-uppercase fw-bold mb-1"
+							style={{ fontSize: "0.7rem" }}
+						>
+							Defense
+						</div>
+						{DEFENSE_SLIDER_CONFIG.map((config) => (
 							<GamePlanSlider
 								key={config.key}
 								config={config}

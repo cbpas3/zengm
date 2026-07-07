@@ -1600,11 +1600,20 @@ export type Team = {
 
 	// Optional because no upgrade — missing fields default to 50 (neutral)
 	gamePlan?: {
+		// Offense
 		pace: number; // 0–100: 0 = grind it out, 100 = run-and-gun
 		threePointRate: number; // 0–100: 0 = never shoot 3s, 100 = live by the 3
 		postPlay: number; // 0–100: 0 = no post-ups, 100 = post-centric offense
 		rimAttack: number; // 0–100: 0 = settle for jumpers, 100 = always attack the rim
 		ballMovement: number; // 0–100: 0 = ISO/star-heavy, 100 = distribute evenly
+		transition: number; // 0–100: 0 = walk it up in the half court, 100 = push every miss/make
+		crashOffensiveGlass: number; // 0–100: 0 = get back on D, 100 = send bodies to the offensive boards
+
+		// Defense
+		pickCoverage: number; // 0–100: 0 = drop/conservative, 100 = switch/blitz everything
+		perimeterPressure: number; // 0–100: 0 = sag off, 100 = pressure the ball
+		helpAggression: number; // 0–100: 0 = stay home on shooters, 100 = collapse on drives
+		defensiveGlass: number; // 0–100: 0 = leak out for offense, 100 = crash defensive boards
 	};
 
 	// Optional because no upgrade

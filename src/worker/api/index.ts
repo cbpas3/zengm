@@ -4216,6 +4216,12 @@ const updateGamePlan = async ({
 		postPlay: number;
 		rimAttack: number;
 		ballMovement: number;
+		transition: number;
+		crashOffensiveGlass: number;
+		pickCoverage: number;
+		perimeterPressure: number;
+		helpAggression: number;
+		defensiveGlass: number;
 	};
 }) => {
 	const t = await idb.cache.teams.get(tid);

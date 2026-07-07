@@ -108,6 +108,12 @@ type TeamGameSim = {
 		postPlay: number;
 		rimAttack: number;
 		ballMovement: number;
+		transition: number;
+		crashOffensiveGlass: number;
+		pickCoverage: number;
+		perimeterPressure: number;
+		helpAggression: number;
+		defensiveGlass: number;
 	};
 };
 
@@ -1521,6 +1527,27 @@ class GameSim extends GameSimBase {
 			this.prevPossessionOutcome === "nonShootingFoul" ||
 			(this.prevPossessionOutcome === "timeout" && timeoutAdvancesBall);
 
+		// A make or a defensive rebound is a transition opportunity - how often it actually turns
+		// into a fast break is scaled by the offense's "transition" game plan slider. If the previous
+		// possession ended with this team's opponent crashing the offensive glass hard (and missing),
+		// that team is out of position, so grant a bonus fast break chance proportional to how hard
+		// they crashed.
+		const isTransitionOpportunity =
+			!possessionStartsInFrontcourt &&
+			(this.prevPossessionOutcome === "fg" ||
+				this.prevPossessionOutcome === "drb");
+		let fastBreak = false;
+		if (isTransitionOpportunity) {
+			const transitionSlider = this.team[this.o]!.gamePlan?.transition ?? 50;
+			let probFastBreak = 0.22 * (0.5 + transitionSlider / 100);
+			if (this.prevPossessionOutcome === "drb") {
+				const crashSlider =
+					this.team[this.d]!.gamePlan?.crashOffensiveGlass ?? 50;
+				probFastBreak *= 1 + (Math.max(0, crashSlider - 50) / 50) * 0.2;
+			}
+			fastBreak = Math.random() < probFastBreak;
+		}
+
 		if (
 			!possessionStartsInFrontcourt &&
 			timeoutAdvancesBall &&
@@ -1607,15 +1634,29 @@ class GameSim extends GameSimBase {
 		// Ball movement: 0 (ISO) → power 2.5 (star-heavy), 100 (distribute) → power 0.7 (flat)
 		// Default 1.25 maps to roughly ballMovement=35 on that scale
 		const offTeam = this.team[this.o]!;
-		const usagePower =
+		const defTeam = this.team[this.d]!;
+		let usagePower =
 			offTeam.gamePlan !== undefined
 				? 2.5 - (offTeam.gamePlan.ballMovement / 100) * 1.8
 				: 1.25;
+
+		// High pick coverage (switch/blitz everything) takes away the offense's ability to just
+		// keep feeding their best player into a mismatch
+		const pickCoverage = defTeam.gamePlan?.pickCoverage ?? 50;
+		usagePower = helpers.bound(
+			usagePower - ((pickCoverage - 50) / 50) * 0.4,
+			0.5,
+			3,
+		);
+
 		const shooter = this.pickPlayer("usage", this.o, usagePower);
 
-		// Non-shooting foul?
+		// Non-shooting foul? High perimeter pressure draws more ticky-tack fouls.
+		const perimeterPressureForFoul = defTeam.gamePlan?.perimeterPressure ?? 50;
+		const foulRateMultiplier =
+			1 + (Math.max(0, perimeterPressureForFoul - 50) / 50) * 0.15;
 		if (
-			Math.random() < 0.08 * g.get("foulRateFactor") ||
+			Math.random() < 0.08 * g.get("foulRateFactor") * foulRateMultiplier ||
 			clockFactor === "intentionalFoul"
 		) {
 			let dt;
@@ -1672,11 +1713,21 @@ class GameSim extends GameSimBase {
 
 		// Time to advance ball to frontcourt
 		if (!possessionStartsInFrontcourt) {
+			// A fast break pushes the ball upcourt much faster than a normal possession
+			const fastBreakFactor = fastBreak ? 0.4 : 1;
 			const upperLimitMin =
-				clockFactor === "catchUp" ? 1 : clockFactor === "maintainLead" ? 4 : 2;
+				(clockFactor === "catchUp"
+					? 1
+					: clockFactor === "maintainLead"
+						? 4
+						: 2) * fastBreakFactor;
 			const min = Math.max(Math.min(this.t - 0.3, upperLimitMin), 0);
 			const upperLimitMax =
-				clockFactor === "catchUp" ? 4 : clockFactor === "maintainLead" ? 8 : 6;
+				(clockFactor === "catchUp"
+					? 4
+					: clockFactor === "maintainLead"
+						? 8
+						: 6) * fastBreakFactor;
 			const max = Math.max(Math.min(this.t - 0.3, upperLimitMax), 0);
 			const dt = random.uniform(min, max);
 			this.advanceClockSeconds(dt);
@@ -1689,6 +1740,7 @@ class GameSim extends GameSimBase {
 			possessionStartsInFrontcourt,
 			tipInFromOutOfBounds,
 			lateGamePutBack,
+			fastBreak,
 		);
 	}
 
@@ -1698,12 +1750,18 @@ class GameSim extends GameSimBase {
 	 * @return {number} Probability from 0 to 1.
 	 */
 	probTov() {
+		// High perimeter pressure forces more live-ball turnovers
+		const perimeterPressure =
+			this.team[this.d]!.gamePlan?.perimeterPressure ?? 50;
+		const perimeterPressureFactor = 1 + ((perimeterPressure - 50) / 50) * 0.15;
+
 		return boundProb(
-			(g.get("turnoverFactor") *
+			((g.get("turnoverFactor") *
 				(0.14 * this.team[this.d].compositeRating.defense)) /
 				(0.5 *
 					(this.team[this.o].compositeRating.dribbling +
-						this.team[this.o].compositeRating.passing)),
+						this.team[this.o].compositeRating.passing))) *
+				perimeterPressureFactor,
 		);
 	}
 
@@ -1788,6 +1846,7 @@ class GameSim extends GameSimBase {
 
 	getShotInfo({
 		currentFatigue,
+		fastBreak,
 		lateGamePutBack,
 		p,
 		passer,
@@ -1795,12 +1854,30 @@ class GameSim extends GameSimBase {
 		putBack,
 	}: {
 		currentFatigue: number;
+		fastBreak: boolean;
 		lateGamePutBack: boolean;
 		p: PlayerGameSim;
 		passer: PlayerGameSim | undefined;
 		tipInFromOutOfBounds: boolean;
 		putBack: boolean;
 	}) {
+		// Defensive game plan effects on the shot the offense ends up taking. High pick coverage
+		// (switch/blitz everything) and high help aggression (collapse on drives) both cut into
+		// interior efficiency and push the offense toward kicking the ball out for threes instead.
+		const defGamePlan = this.team[this.d]!.gamePlan;
+		const pickCoverage = defGamePlan?.pickCoverage ?? 50;
+		const helpAggression = defGamePlan?.helpAggression ?? 50;
+		const pickCoverageInteriorFactor =
+			1 - (Math.max(0, pickCoverage - 50) / 50) * 0.1;
+		const helpAggressionAtRimFactor =
+			1 - (Math.max(0, helpAggression - 50) / 50) * 0.12;
+		const helpAggressionThreeEfficiencyFactor =
+			1 + (Math.max(0, helpAggression - 50) / 50) * 0.08;
+		const threeFrequencyDefenseFactor =
+			1 +
+			(Math.max(0, pickCoverage - 50) / 50) * 0.08 +
+			(Math.max(0, helpAggression - 50) / 50) * 0.1;
+
 		let shootingThreePointerScaled = p.compositeRating.shootingThreePointer;
 
 		// Too many players shooting 3s at the high end - scale 0.55-1.0 to 0.55-0.85
@@ -1871,7 +1948,9 @@ class GameSim extends GameSimBase {
 					// Game plan overrides the era factor: lerp 0→0.2, 50→1.35 (neutral), 100→2.5
 					(this.team[this.o]!.gamePlan !== undefined
 						? 0.2 + (this.team[this.o]!.gamePlan!.threePointRate / 100) * 2.3
-						: g.get("threePointTendencyFactor"))
+						: g.get("threePointTendencyFactor")) *
+					// Hard coverage and help defense both invite more kick-out threes
+					threeFrequencyDefenseFactor
 		) {
 			// Three pointer
 			type = "threePointer";
@@ -1885,6 +1964,9 @@ class GameSim extends GameSimBase {
 				probMake += 0.02;
 			}
 			probMake *= g.get("threePointAccuracyFactor");
+
+			// Threes generated by heavy help defense are the open, kicked-out kind
+			probMake *= helpAggressionThreeEfficiencyFactor;
 		} else {
 			const gp = this.team[this.o].gamePlan;
 
@@ -1894,7 +1976,9 @@ class GameSim extends GameSimBase {
 				(p.compositeRating.shootingAtRim +
 					this.synergyFactor *
 						(this.team[this.o].synergy.off - this.team[this.d].synergy.def)) * // Synergy makes easy shots either more likely or less likely
-				(gp !== undefined ? 0.5 + (gp.rimAttack / 100) * 1.5 : 1);
+				(gp !== undefined ? 0.5 + (gp.rimAttack / 100) * 1.5 : 1) *
+				// A fast break biases shot selection heavily toward the rim
+				(fastBreak ? 1.4 : 1);
 
 			const r3 =
 				Math.random() *
@@ -1917,6 +2001,9 @@ class GameSim extends GameSimBase {
 				probMissAndFoul = 0.37;
 				probMake = p.compositeRating.shootingAtRim * 0.41 + 0.54;
 				probAndOne = 0.25;
+
+				// Staying attached through picks and collapsing to help both cut into rim efficiency
+				probMake *= pickCoverageInteriorFactor * helpAggressionAtRimFactor;
 			} else {
 				// Post up
 				fgaLogType = "fgaLowPost";
@@ -1924,6 +2011,8 @@ class GameSim extends GameSimBase {
 				probMissAndFoul = 0.33;
 				probMake = p.compositeRating.shootingLowPost * 0.32 + 0.34;
 				probAndOne = 0.15;
+
+				probMake *= pickCoverageInteriorFactor;
 			}
 			// Better shooting in the ASG, why not?
 			if (this.allStarGame) {
@@ -1987,6 +2076,7 @@ class GameSim extends GameSimBase {
 		possessionStartsInFrontcourt: boolean,
 		tipInFromOutOfBounds: boolean,
 		lateGamePutBack: boolean,
+		fastBreak: boolean = false,
 	) {
 		const putBack = lateGamePutBack; // Eventually use this in more situations
 
@@ -2073,6 +2163,7 @@ class GameSim extends GameSimBase {
 			type,
 		} = this.getShotInfo({
 			currentFatigue,
+			fastBreak,
 			lateGamePutBack,
 			p,
 			passer,
@@ -2749,10 +2840,24 @@ class GameSim extends GameSimBase {
 			return this.doOutOfBounds(0.1);
 		}
 
+		const oGamePlan = this.team[this.o]!.gamePlan;
+		const dGamePlan = this.team[this.d]!.gamePlan;
+		const crashOffensiveGlass = oGamePlan?.crashOffensiveGlass ?? 50;
+		const defensiveGlass = dGamePlan?.defensiveGlass ?? 50;
+		const perimeterPressure = dGamePlan?.perimeterPressure ?? 50;
+
+		// Crashing the offensive glass pulls rebounds away from the defense; crashing the defensive
+		// glass claws them back. High perimeter pressure leaves the defense out of position to box out.
+		const crashFactor = 0.7 + (crashOffensiveGlass / 100) * 0.6;
+		const defensiveGlassFactor = 0.7 + (defensiveGlass / 100) * 0.6;
+		const perimeterPressurePenalty =
+			1 - (Math.max(0, perimeterPressure - 50) / 50) * 0.08;
+
 		if (
-			(0.75 * (2 + this.team[this.d].compositeRating.rebounding)) /
+			((0.75 * (2 + this.team[this.d].compositeRating.rebounding)) /
 				(g.get("orbFactor") *
-					(2 + this.team[this.o].compositeRating.rebounding)) >
+					(2 + this.team[this.o].compositeRating.rebounding))) *
+				((defensiveGlassFactor * perimeterPressurePenalty) / crashFactor) >
 			Math.random()
 		) {
 			p = this.pickPlayer("rebounding", this.d, 3);
