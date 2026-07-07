@@ -413,6 +413,10 @@ export const getDefaultSettings = () => {
 		),
 		schemeFit: unwrapGameAttribute(defaultGameAttributes, "schemeFit"),
 		teamChemistry: unwrapGameAttribute(defaultGameAttributes, "teamChemistry"),
+		inSeriesAdjustments: unwrapGameAttribute(
+			defaultGameAttributes,
+			"inSeriesAdjustments",
+		),
 		saveOldBoxScores: unwrapGameAttribute(
 			defaultGameAttributes,
 			"saveOldBoxScores",

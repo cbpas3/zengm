@@ -1376,6 +1376,14 @@ export const settings: Setting[] = (
 		},
 		{
 			category: "Challenge Modes",
+			key: "inSeriesAdjustments",
+			name: "In-Series AI Adjustments",
+			type: "bool",
+			description:
+				"During a playoff series, the AI opponent's coach reads your shot profile from the earlier games of that series and adjusts its defensive game plan to counter it - pressuring the perimeter and staying home on shooters against a hot three-point series, or switching everything and crashing the defensive glass against a team living in the paint or feeding one high-usage star. Adjustments get bigger later in the series and when the AI is trailing.",
+		},
+		{
+			category: "Challenge Modes",
 			key: "challengeSisyphusMode",
 			name: "Sisyphus Mode",
 			type: "bool",

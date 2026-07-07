@@ -18,6 +18,11 @@ import {
 	countTopPositionGroups,
 } from "../team/positionalDepthTax.ts";
 import { computeSchemeFit } from "../team/schemeFit.ts";
+import {
+	computeInSeriesAdjustments,
+	type GamePlan,
+	type OpponentSeriesShotProfile,
+} from "../team/inSeriesAdjustments.ts";
 
 const MAX_NUM_PLAYERS_PACE = 7;
 
@@ -69,6 +74,95 @@ export const isGame6EliminationGameOrGame7 = async (
 	}
 
 	return false;
+};
+
+// In-series AI adjustments (Harder RPD Challenge, Phase 5): find the playoff series this AI team
+// is currently in and, from the box scores of the games already played in that series, compute an
+// adjusted defensive game plan. Neutral (returns baseGamePlan unchanged) for game 1 of a series,
+// or if no series/box scores are found. See inSeriesAdjustments.ts for the heuristic itself.
+const getInSeriesGamePlan = async (
+	tid: number,
+	baseGamePlan: GamePlan,
+): Promise<GamePlan> => {
+	const playoffSeries = await idb.cache.playoffSeries.get(g.get("season"));
+	if (!playoffSeries || playoffSeries.currentRound < 0) {
+		return baseGamePlan;
+	}
+
+	const round = playoffSeries.currentRound;
+	const roundSeries = playoffSeries.series[round];
+	if (!roundSeries) {
+		return baseGamePlan;
+	}
+
+	const series = roundSeries.find(
+		(s) => s.away !== undefined && (s.home.tid === tid || s.away.tid === tid),
+	);
+	if (!series || !series.away || !series.gids || series.gids.length === 0) {
+		// Game 1 of the series, or this team isn't in an active series - nothing to learn from yet.
+		return baseGamePlan;
+	}
+
+	const opponentTid =
+		series.home.tid === tid ? series.away.tid : series.home.tid;
+
+	const games = (
+		await Promise.all(
+			series.gids.map((gid) => idb.getCopy.games({ gid }, "noCopyCache")),
+		)
+	).filter((gm) => gm !== undefined);
+
+	let fga = 0;
+	let tpa = 0;
+	let tp = 0;
+	let fgaAtRim = 0;
+	let orb = 0;
+	let teamPts = 0;
+	let starPts = 0;
+	let gamesCounted = 0;
+
+	for (const gm of games) {
+		const oppIdx =
+			gm.teams[0].tid === opponentTid
+				? 0
+				: gm.teams[1].tid === opponentTid
+					? 1
+					: -1;
+		if (oppIdx === -1) {
+			continue;
+		}
+
+		const opp = gm.teams[oppIdx];
+		fga += opp.fga ?? 0;
+		tpa += opp.tpa ?? 0;
+		tp += opp.tp ?? 0;
+		fgaAtRim += opp.fgaAtRim ?? 0;
+		orb += opp.orb ?? 0;
+		teamPts += opp.pts ?? 0;
+		starPts += Math.max(0, ...(opp.players ?? []).map((p: any) => p.pts ?? 0));
+		gamesCounted += 1;
+	}
+
+	if (gamesCounted === 0 || fga === 0) {
+		return baseGamePlan;
+	}
+
+	const profile: OpponentSeriesShotProfile = {
+		threePointRate: tpa / fga,
+		threePointAccuracy: tpa > 0 ? tp / tpa : 0,
+		rimRate: fgaAtRim / fga,
+		orbPerGame: orb / gamesCounted,
+		starUsageShare: teamPts > 0 ? starPts / teamPts : 0,
+	};
+
+	const aiWon = series.home.tid === tid ? series.home.won : series.away.won;
+	const oppWon = series.home.tid === tid ? series.away.won : series.home.won;
+
+	return computeInSeriesAdjustments(baseGamePlan, profile, {
+		gamesPlayed: aiWon + oppWon,
+		numGamesSeries: g.get("numGamesPlayoffSeries", "current")[round] ?? 7,
+		trailing: aiWon < oppWon,
+	});
 };
 
 // Decrease rating by up to 40%
@@ -172,6 +266,21 @@ export const processTeam = async (
 
 	const playoffs = g.get("phase") === PHASE.PLAYOFFS;
 
+	// In-series AI adjustments (Phase 5): only for AI teams, mid-playoffs, gated on the toggle.
+	// Overrides the game plan used for this game only - teamInput (the stored team object) is
+	// never mutated, so nothing here gets persisted.
+	let gamePlan = teamInput.gamePlan;
+	if (
+		isSport("basketball") &&
+		playoffs &&
+		!allStarGame &&
+		gamePlan !== undefined &&
+		g.get("inSeriesAdjustments") &&
+		!g.get("userTids").includes(teamInput.tid)
+	) {
+		gamePlan = await getInSeriesGamePlan(teamInput.tid, gamePlan);
+	}
+
 	const actualPlayThroughInjuries = getActualPlayThroughInjuries(teamInput);
 
 	// Injury-adjusted ovr
@@ -212,7 +321,7 @@ export const processTeam = async (
 		},
 		compositeRating,
 		depth: teamInput.depth,
-		gamePlan: teamInput.gamePlan,
+		gamePlan,
 	};
 
 	const playThroughInjuries = actualPlayThroughInjuries[playoffs ? 1 : 0];
@@ -393,8 +502,8 @@ export const processTeam = async (
 		}
 
 		// Game plan pace modifier: 0=×0.85, 50=×1.0 (neutral), 100=×1.15
-		if (teamInput.gamePlan !== undefined) {
-			t.pace *= 0.85 + (teamInput.gamePlan.pace / 100) * 0.3;
+		if (gamePlan !== undefined) {
+			t.pace *= 0.85 + (gamePlan.pace / 100) * 0.3;
 		}
 
 		// Positional-depth tax: punish rosters that don't cover the position spectrum.
@@ -430,9 +539,9 @@ export const processTeam = async (
 				}
 			}
 			t.schemeFit = computeSchemeFit(healthySchemeFitPlayers, {
-				threePointRate: teamInput.gamePlan?.threePointRate ?? 50,
-				rimAttack: teamInput.gamePlan?.rimAttack ?? 50,
-				postPlay: teamInput.gamePlan?.postPlay ?? 50,
+				threePointRate: gamePlan?.threePointRate ?? 50,
+				rimAttack: gamePlan?.rimAttack ?? 50,
+				postPlay: gamePlan?.postPlay ?? 50,
 			});
 		}
 

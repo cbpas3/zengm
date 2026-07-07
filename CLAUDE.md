@@ -278,9 +278,9 @@ old 5-key `gamePlan` in the DB doesn't render `undefined`/`NaN` sliders for the 
 
 ### Future phases
 
-Phases 2–5 (positional-depth tax, scheme fit, team chemistry, in-series AI adjustments) are planned
-but not yet built — see `CHALLENGE_FEATURES_PLAN.md`. Phase 3 (scheme fit) and Phase 5 (in-series AI
-adjustments) both depend on the sliders added here.
+Phases 2–5 (positional-depth tax, scheme fit, team chemistry, in-series AI adjustments) have all
+since been built — see Features 5–8 below (and `CHALLENGE_FEATURES_PLAN.md` for the original plan).
+Phase 3 (scheme fit) and Phase 5 (in-series AI adjustments) both depend on the sliders added here.
 
 ---
 
@@ -376,8 +376,7 @@ one (this is a "your active roster" readout, not historical). Renders nothing if
 
 ### Future phases
 
-Phase 5 (in-series AI adjustments) is planned but not yet built — see
-`CHALLENGE_FEATURES_PLAN.md`.
+Phase 5 (in-series AI adjustments) has since been built — see Feature 8 below.
 
 ---
 
@@ -451,8 +450,7 @@ not plan-driven shot selection).
 
 ### Future phases
 
-Phase 5 (in-series AI adjustments) is planned but not yet built — see
-`CHALLENGE_FEATURES_PLAN.md`.
+Phase 5 (in-series AI adjustments) has since been built — see Feature 8 below.
 
 ---
 
@@ -543,7 +541,95 @@ UI flag needs to be threaded through. Shown for historical seasons too, not just
 
 ### Future phases
 
-Phase 5 (in-series AI adjustments) is planned but not yet built — see `CHALLENGE_FEATURES_PLAN.md`.
+Phase 5 (in-series AI adjustments) has since been built — see Feature 8 below.
+
+---
+
+## Feature 8: In-Series AI Adjustments (Harder RPD Challenge, Phase 5)
+
+### What it does
+
+During a playoff **series**, the AI opponent's coach reads the user's shot profile from the games
+already played _in that series_ and nudges its own defensive game-plan sliders (Phase 1) to
+counter it — so a superior-but-predictable team can get out-schemed instead of running the same
+plan for seven games. Pure heuristic, no LLM calls. Gated behind the `inSeriesAdjustments` game
+attribute (default `false`); a neutral no-op when off. Unlike Phases 2–4, this is the deliberate
+exception to "applies to every team" — it only ever adjusts an **AI** team's plan, and only to
+counter the **user**, since the user already chooses their own plan.
+
+### Where it hooks in (`processTeam`, `loadTeams.ts`)
+
+Right after `playoffs` is computed, `processTeam` builds a local `gamePlan` variable (starting as
+`teamInput.gamePlan`) and, only when the team being processed is an AI team
+(`!g.get("userTids").includes(teamInput.tid)`), it's the playoffs, it's not the All-Star game, and
+`inSeriesAdjustments` is on, calls `getInSeriesGamePlan(tid, gamePlan)` to (possibly) override it.
+Every other read that used to say `teamInput.gamePlan` (the `t.gamePlan` assignment, the pace
+modifier, the scheme-fit slider reads) now reads this local `gamePlan` instead — one source of
+truth, and `teamInput`/`t.tid`'s actual stored `Team.gamePlan` is never mutated, so the adjustment
+only ever affects the game being loaded, never persisted.
+
+### Finding the series + prior games (`getInSeriesGamePlan`, `loadTeams.ts`)
+
+Mirrors the existing `isGame6EliminationGameOrGame7` lookup pattern in the same file: pulls
+`idb.cache.playoffSeries.get(season)`, finds the `series` entry in the current round where this
+tid is home or away, and reads `series.gids` — the list of gids **already played in this exact
+series** (pushed by `updatePlayoffSeries.ts` after each game, so by the time `processTeam` runs for
+game _N_, `gids` holds games `1..N-1`). No `gids` yet (game 1, or team not in an active series) is
+a no-op — nothing to learn from. Prior box scores are fetched with `idb.getCopy.games({ gid })` per
+gid (always in `idb.cache` for the current season, since box-score pruning only touches past
+seasons — see `saveOldBoxScores` in Feature 3b).
+
+### Building the shot profile
+
+From each prior series game's `GameTeam` box score for the **opponent** (the user's team), sums
+`fga`, `tpa`, `tp`, `fgaAtRim`, `orb`, `pts`, and the leading scorer's `pts` (`Math.max` over
+`opp.players`) — all raw team/player stats already recorded by the sim (see
+`src/worker/core/team/stats.basketball.ts`), no new tracking needed. Averaged into an
+`OpponentSeriesShotProfile`: `threePointRate` (`tpa/fga`), `threePointAccuracy` (`tp/tpa`),
+`rimRate` (`fgaAtRim/fga`), `orbPerGame`, `starUsageShare` (leading scorer's share of team points).
+
+### The heuristic (`src/worker/core/team/inSeriesAdjustments.ts`, pure)
+
+Mirrors `positionalDepthTax.ts` / `schemeFit.ts`: a pure, DB-free compute module. Each signal is a
+deviation from a roughly-league-average neutral baseline (e.g. `NEUTRAL_THREE_POINT_RATE = 0.38`),
+not a hard threshold — a team that's exactly average on a signal contributes nothing:
+
+- `threePointThreat = (threePointRate − 0.38) + (threePointAccuracy − 0.36) × 2` → lowers
+  `helpAggression` (stay home on shooters) and raises `perimeterPressure` (contest the ball) against
+  a hot, high-volume three-point series.
+- `paintThreat = (rimRate − 0.35) + (orbPerGame − 10) × 0.04` → raises `pickCoverage`
+  (switch/blitz) and `defensiveGlass` against a series opponent living in the paint or crashing the
+  offensive glass.
+- `starThreat = starUsageShare − 0.28` → also raises `pickCoverage` (switch/blitz the ball-dominant
+  star) on top of the paint contribution.
+
+`computeSeriesEscalation` scales every adjustment by series progress (`gamesPlayed /
+(numGamesSeries − 1)`, so games 5–7 of a 7-game series hit harder than game 2) × `1.3` if the AI is
+trailing the series. Each slider's final delta is capped at ±25 from its stored value
+(`MAX_ADJUSTMENT`) so the AI plan stays coherent even against an extreme profile, then the result
+is bounded back to `[0, 100]`.
+
+### Key files
+
+| File                                          | Role                                                                                  |
+| --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `src/common/types.ts`                         | `GameAttributesLeague.inSeriesAdjustments`                                            |
+| `src/common/defaultGameAttributes.ts`         | Registers the attribute for basketball, default `false`                               |
+| `src/ui/views/Settings/settings.tsx`          | "In-Series AI Adjustments" toggle under Challenge Modes                               |
+| `src/worker/core/team/inSeriesAdjustments.ts` | `computeInSeriesAdjustments`, `computeSeriesEscalation` — the pure heuristic          |
+| `src/worker/core/game/loadTeams.ts`           | `getInSeriesGamePlan` (series/box-score lookup) + `processTeam`'s `gamePlan` override |
+
+No `GameSim.basketball` changes — Phase 5 only chooses different values for the Phase 1 defensive
+sliders, which are already wired into the sim.
+
+### Future phases
+
+None planned — Phase 5 was the last item in `CHALLENGE_FEATURES_PLAN.md`'s original scope. The
+plan's optional "5d" polish (logging a play-by-play/news note when the AI adjusts, e.g. "Opponent
+adjusted: switching everything on your pick-and-roll") was deliberately skipped: it needs a
+`Conditions` object threaded from `loadTeams` into `processTeam` (which doesn't currently receive
+one), a bigger plumbing change than the heuristic itself. Worth adding as a fast-follow if the
+adjustment ends up feeling invisible in practice.
 
 ---
 

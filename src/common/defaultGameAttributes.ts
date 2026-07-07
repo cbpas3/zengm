@@ -83,6 +83,7 @@ const gameAttributesKeysSportSpecific = {
 		"positionalDepthTax",
 		"schemeFit",
 		"teamChemistry",
+		"inSeriesAdjustments",
 		"foulRateFactor",
 		"foulsNeededToFoulOut",
 		"foulsUntilBonus",
@@ -384,6 +385,7 @@ const defaultGameAttributes: GameAttributesLeagueWithHistory = {
 	positionalDepthTax: false,
 	schemeFit: false,
 	teamChemistry: false,
+	inSeriesAdjustments: false,
 	saveOldBoxScores: {
 		pastSeasons: 100,
 		pastSeasonsType: "all",

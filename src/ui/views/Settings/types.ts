@@ -165,6 +165,7 @@ export type Key =
 	| "positionalDepthTax"
 	| "schemeFit"
 	| "teamChemistry"
+	| "inSeriesAdjustments"
 	| "saveOldBoxScores"
 	| "currencyFormat"
 	| "overtimeLength"

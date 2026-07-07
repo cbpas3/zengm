@@ -174,6 +174,7 @@ type Key =
 	| "positionalDepthTax"
 	| "schemeFit"
 	| "teamChemistry"
+	| "inSeriesAdjustments"
 	| "saveOldBoxScores"
 	| "currencyFormat"
 	| "overtimeLength"
@@ -398,6 +399,7 @@ const updateSettings = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			positionalDepthTax: g.get("positionalDepthTax"),
 			schemeFit: g.get("schemeFit"),
 			teamChemistry: g.get("teamChemistry"),
+			inSeriesAdjustments: g.get("inSeriesAdjustments"),
 			saveOldBoxScores: g.get("saveOldBoxScores"),
 			currencyFormat: g.get("currencyFormat"),
 			overtimeLength: g.get("overtimeLength"),

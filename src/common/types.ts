@@ -751,6 +751,7 @@ export type GameAttributesLeague = {
 	positionalDepthTax: boolean;
 	schemeFit: boolean;
 	teamChemistry: boolean;
+	inSeriesAdjustments: boolean;
 	currencyFormat: [string, "." | ",", string];
 	overtimeLength: number;
 	overtimeLengthPlayoffs: number | null;
