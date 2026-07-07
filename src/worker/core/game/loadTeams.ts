@@ -17,6 +17,7 @@ import {
 	computeDepthTax,
 	countTopPositionGroups,
 } from "../team/positionalDepthTax.ts";
+import { computeSchemeFit } from "../team/schemeFit.ts";
 
 const MAX_NUM_PLAYERS_PACE = 7;
 
@@ -406,6 +407,32 @@ export const processTeam = async (
 				}
 			}
 			t.depthTax = computeDepthTax(countTopPositionGroups(healthyPositions));
+		}
+
+		// Scheme fit: does the game plan's shot-selection emphasis match this roster's actual
+		// shooting capability? Reads the same healthy top-players set as the depth tax above.
+		if (g.get("schemeFit")) {
+			const healthySchemeFitPlayers: {
+				compositeRating: {
+					shootingThreePointer: number;
+					shootingAtRim: number;
+					shootingLowPost: number;
+				};
+				devFocus: Player<MinimalPlayerRatings>["devFocus"];
+			}[] = [];
+			for (const [i, p2] of t.player.entries()) {
+				if (p2.injury.gamesRemaining === 0 || p2.injury.playingThrough) {
+					healthySchemeFitPlayers.push({
+						compositeRating: p2.compositeRating,
+						devFocus: players[i]!.devFocus,
+					});
+				}
+			}
+			t.schemeFit = computeSchemeFit(healthySchemeFitPlayers, {
+				threePointRate: teamInput.gamePlan?.threePointRate ?? 50,
+				rimAttack: teamInput.gamePlan?.rimAttack ?? 50,
+				postPlay: teamInput.gamePlan?.postPlay ?? 50,
+			});
 		}
 	}
 

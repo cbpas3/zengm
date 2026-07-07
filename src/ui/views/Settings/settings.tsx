@@ -1360,6 +1360,14 @@ export const settings: Setting[] = (
 		},
 		{
 			category: "Challenge Modes",
+			key: "schemeFit",
+			name: "Scheme Fit",
+			type: "bool",
+			description:
+				"Your game plan has to match your personnel. Cranking a slider (like three-point rate or post play) toward a shot type your roster isn't built for makes that shot less efficient; leaning into an actual strength makes it more efficient. Applies to every team, not just yours.",
+		},
+		{
+			category: "Challenge Modes",
 			key: "challengeSisyphusMode",
 			name: "Sisyphus Mode",
 			type: "bool",

@@ -172,6 +172,7 @@ type Key =
 	| "neutralSite"
 	| "rpdPot"
 	| "positionalDepthTax"
+	| "schemeFit"
 	| "saveOldBoxScores"
 	| "currencyFormat"
 	| "overtimeLength"
@@ -394,6 +395,7 @@ const updateSettings = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			neutralSite: g.get("neutralSite"),
 			rpdPot: g.get("rpdPot"),
 			positionalDepthTax: g.get("positionalDepthTax"),
+			schemeFit: g.get("schemeFit"),
 			saveOldBoxScores: g.get("saveOldBoxScores"),
 			currencyFormat: g.get("currencyFormat"),
 			overtimeLength: g.get("overtimeLength"),

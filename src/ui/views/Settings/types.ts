@@ -163,6 +163,7 @@ export type Key =
 	| "neutralSite"
 	| "rpdPot"
 	| "positionalDepthTax"
+	| "schemeFit"
 	| "saveOldBoxScores"
 	| "currencyFormat"
 	| "overtimeLength"

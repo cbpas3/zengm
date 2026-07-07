@@ -81,6 +81,7 @@ const gameAttributesKeysSportSpecific = {
 		"realPlayerDeterminism",
 		"rpdPot",
 		"positionalDepthTax",
+		"schemeFit",
 		"foulRateFactor",
 		"foulsNeededToFoulOut",
 		"foulsUntilBonus",
@@ -380,6 +381,7 @@ const defaultGameAttributes: GameAttributesLeagueWithHistory = {
 	tradeProposalsSeed: 0,
 	rpdPot: true,
 	positionalDepthTax: false,
+	schemeFit: false,
 	saveOldBoxScores: {
 		pastSeasons: 100,
 		pastSeasonsType: "all",

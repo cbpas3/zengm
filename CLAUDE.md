@@ -374,9 +374,83 @@ one (this is a "your active roster" readout, not historical). Renders nothing if
 
 ### Future phases
 
-Phases 3–5 (scheme fit, team chemistry, in-series AI adjustments) are planned but not yet built —
-see `CHALLENGE_FEATURES_PLAN.md`. Phase 3 depends on Phase 1's sliders and reuses this phase's
-`processTeam` scalar pattern.
+Phases 4–5 (team chemistry, in-series AI adjustments) are planned but not yet built — see
+`CHALLENGE_FEATURES_PLAN.md`.
+
+---
+
+## Feature 6: Scheme Fit (Harder RPD Challenge, Phase 3)
+
+### What it does
+
+Punishes setting a game plan that doesn't match your personnel — cranking `threePointRate` with
+no shooters, or `postPlay` with no post scorers, actively hurts shooting efficiency instead of
+just being a wasted slider. Gated behind the `schemeFit` game attribute (default `false`); a
+neutral/no-op when off. Applies to **every** team, user and AI alike, same as the positional-depth
+tax (Feature 5) — `processTeam` computes it for whichever `tid` it's given, no branch on
+`userTids`.
+
+Primary signal is **actual ratings** (works for every player, dev-focus or not); `devFocus`
+archetypes are an optional bonus layer on top.
+
+### Compute (`src/worker/core/team/schemeFit.ts`)
+
+`computeSchemeFit(players, gamePlan)` takes the same "top 8 healthy players by `rosterOrder`" set
+the positional-depth tax uses (see `processTeam` in `loadTeams.ts` — the two features share the
+healthy-player loop pattern, just with different fields collected: composite ratings + `devFocus`
+here instead of position). For each of three shot types it averages the relevant composite rating
+across that set — `shootingThreePointer`, `shootingAtRim`, `shootingLowPost` (all already computed
+per-player in `processTeam`'s `COMPOSITE_WEIGHTS` loop, range `[0, 1]`) — and compares it to the
+matching game-plan slider:
+
+```
+fit = 1 + k * (capability - 0.5) * (sliderValue/100 - 0.5)     // k = 0.3, so ~±7.5% at the extremes
+```
+
+The term vanishes (multiplier ≈ 1) when capability is average (0.5) or the slider is neutral (50).
+Leaning a slider into a real strength is a bonus; leaning it into a weakness is a penalty — either
+direction, symmetric.
+
+**Optional dev-focus bonus** — `DEV_FOCUS_GAMEPLAN_AFFINITY` (`developSeason.ts`, exported next to
+`DEV_FOCUS_RATINGS`) maps each archetype to the offense slider it lines up with: `Sharpshooter` and
+`3-and-D` → `threePointRate`, `Slasher` and `Athletic` → `rimAttack`, `Post Scorer` → `postPlay`.
+`Playmaker`, `Lockdown`, and `Floor General` have no offense-slider counterpart and map to `{}`.
+When the plan leans into a slider (`sliderValue > 50`) and matching `devFocus` players are on the
+healthy top 8, a small additive bonus (`+0.02` per matching player, capped at `+0.06` total) stacks
+on top of the ratings-based fit above. This is a bonus only, not a symmetric penalty — it doesn't
+fire when the slider leans away from the archetype.
+
+### Apply (`GameSim.basketball/index.ts`, `getShotInfo`)
+
+`t.schemeFit = { threePointer, atRim, lowPost }` multiplies the shooting team's own `probMake` in
+the three matching branches of the shot-type if/else chain:
+
+- Three-pointer branch (after `helpAggressionThreeEfficiencyFactor`) × `schemeFit.threePointer`
+- `atRim` branch (after the positional-depth-tax `oppRim` read) × `schemeFit.atRim`
+- `lowPost` branch (after `pickCoverageInteriorFactor`) × `schemeFit.lowPost`
+
+Read via `this.team[this.o]!.schemeFit?.threePointer/atRim/lowPost ?? 1` (the **offense** team's
+own fit, unlike `depthTax.oppRim` which reads the opponent) — this deliberately pairs with the frequency effects
+the Phase 1 sliders already have: the slider makes you _take_ more of a shot, scheme fit decides
+whether taking more of it actually _helps_. `tipIn`/`putBack` shot types are unaffected (opportunistic,
+not plan-driven shot selection).
+
+### Key files
+
+| File                                          | Role                                                                                 |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `src/common/types.ts`                         | `GameAttributesLeague.schemeFit`                                                     |
+| `src/common/defaultGameAttributes.ts`         | Registers the attribute for basketball, default `false`                              |
+| `src/ui/views/Settings/settings.tsx`          | "Scheme Fit" toggle under Challenge Modes                                            |
+| `src/worker/core/team/schemeFit.ts`           | `computeSchemeFit` — capability averaging + fit/affinity formulas                    |
+| `src/worker/core/player/developSeason.ts`     | `DEV_FOCUS_GAMEPLAN_AFFINITY` export, alongside `DEV_FOCUS_RATINGS`                  |
+| `src/worker/core/game/loadTeams.ts`           | `processTeam` computes `t.schemeFit`, gated on the attribute                         |
+| `src/worker/core/GameSim.basketball/index.ts` | `TeamGameSim.schemeFit` type; applies it in `getShotInfo`'s three shot-type branches |
+
+### Future phases
+
+Phases 4–5 (team chemistry, in-series AI adjustments) are planned but not yet built — see
+`CHALLENGE_FEATURES_PLAN.md`.
 
 ---
 

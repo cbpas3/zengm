@@ -46,6 +46,24 @@ export const DEV_FOCUS_RATINGS: Record<DevFocusType, string[]> = {
 	floorGeneral: ["oiq", "pss", "drb"],
 };
 
+// Scheme-fit bonus (Phase 3): archetypes that line up with a game-plan slider get a small extra
+// bump on top of the ratings-based fit in schemeFit.ts. Not every archetype has an obvious
+// offense-slider counterpart (e.g. lockdown/floorGeneral are defense/playmaking focused), so
+// those map to {}.
+export const DEV_FOCUS_GAMEPLAN_AFFINITY: Record<
+	DevFocusType,
+	Partial<Record<"threePointRate" | "rimAttack" | "postPlay", number>>
+> = {
+	sharpshooter: { threePointRate: 1 },
+	slasher: { rimAttack: 1 },
+	postScorer: { postPlay: 1 },
+	playmaker: {},
+	threeAndD: { threePointRate: 1 },
+	lockdown: {},
+	athletic: { rimAttack: 1 },
+	floorGeneral: {},
+};
+
 const getMentorBonus = (
 	mentorRatings: Partial<Record<string, number>> | undefined,
 	key: string,

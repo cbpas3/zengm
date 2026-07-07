@@ -749,6 +749,7 @@ export type GameAttributesLeague = {
 	neutralSite: "never" | "finals" | "playoffs";
 	rpdPot: boolean;
 	positionalDepthTax: boolean;
+	schemeFit: boolean;
 	currencyFormat: [string, "." | ",", string];
 	overtimeLength: number;
 	overtimeLengthPlayoffs: number | null;
