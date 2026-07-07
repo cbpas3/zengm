@@ -164,12 +164,20 @@ One team's one season, told as a story — identity, turning point, how it ended
 - In-season trades, from `idb.getCopies.events({ season })` filtered to `type: "trade"`
 - Dev-system texture: breakthrough-caliber rating jumps (age ≤24, OVR delta ≥8 year-over-year) — **not** the live `devFocus`/`mentorPid` fields, since those aren't stored historically per season and only reliably describe the _current_ season
 
+**Mid-season awareness** — the button works on the in-progress season too (not just completed ones), and the ground truth explicitly flags this via `seasonProgress: { isComplete, gamesPlayed, numGamesRegularSeason, description }` computed from `g.get("season")`/`g.get("phase")` vs. the requested season (`phase >= PHASE.DRAFT_LOTTERY` = that season is fully done, including any playoffs). When `isComplete` is `false`:
+
+- `howSeasonEnded`/seed/"final record" framing is swapped for "current record" + an explicit `Season status: IN PROGRESS — …` line, so Gemini isn't handed a `showMissedPlayoffs`-flavored fact for a team that's simply 40 games from finding out
+- Both prompts drop the "climax → resolution" framing for "where things stand right now," and the prose pass is told to close with 2–3 forward-looking sentences (trending strengths/weaknesses, hot/cold streaks) instead of a wrap-up
+- The prose pass is also nudged to weave in a `devNotes` entry when present (breakthrough jumps, mentorship) — this is the "highlight player growth" angle for a season that hasn't produced a real ending yet
+
 **Two-pass generation** — `generateSeasonStoryArticle(tid, season)` in `gemini.ts`:
 
-1. **Outline pass** — ground truth → JSON `{ title, angle, beats: [{ when, what, why_it_mattered }] }` (4–6 beats), `thinkingLevel: "low"`
-2. **Prose pass** — ground truth + the approved outline → 600–900 word retrospective (setup → turning point → climax → resolution), `thinkingLevel: "medium"` for coherence over the longer arc
+1. **Outline pass** — ground truth → JSON `{ title, angle, beats: [{ when, what, why_it_mattered }] }` (4–6 beats, 3–5 if in progress), `thinkingLevel: "low"`
+2. **Prose pass** — ground truth + the approved outline → 600–900 word retrospective, `thinkingLevel: "medium"` for coherence over the longer arc
 
-`callGemini` was extended to accept `thinkingLevel` and `maxOutputTokens` in its options (previously hardcoded to `"low"` / `8192`).
+`callGemini` was extended to accept `thinkingLevel`, `maxOutputTokens`, and `timeoutMs` in its options (previously hardcoded to `"low"` / `8192` / `20000`).
+
+**Timeout/retry:** this feature's two prompts (full ground-truth block + a long-form prose ask) run close enough to the default 20s abort that a single slow/cold-start response would trip the fallback banner and force the user to click twice. Both passes now use `timeoutMs: 30000` and go through `callGeminiWithRetry` (one silent retry on a `null` result) instead of a bare `callGemini` call — scoped to this feature only, not the shared `callGemini` default, since a trade veto/offer call is small enough that 20s was never the bottleneck there.
 
 ### Key files (3b)
 

@@ -138,11 +138,15 @@ export const callGemini = async (
 		temperature?: number;
 		thinkingLevel?: "minimal" | "low" | "medium" | "high";
 		maxOutputTokens?: number;
+		timeoutMs?: number;
 	},
 ): Promise<string | null> => {
 	console.log("[Gemini] callGemini: starting fetch");
 	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), 20000);
+	const timer = setTimeout(
+		() => controller.abort(),
+		options?.timeoutMs ?? 20000,
+	);
 	try {
 		const response = await fetch(
 			`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
@@ -382,6 +386,25 @@ type SeasonStoryOutline = {
 	beats: { when: string; what: string; why_it_mattered: string }[];
 };
 
+// The season-story prompts are much larger than this file's other prompts
+// (a full ground-truth text block, plus a long-form prose request), so they
+// run closer to the fetch timeout than a quick trade veto/offer call does.
+// One retry absorbs an occasional slow/cold-start response instead of
+// surfacing the fallback banner and making the user click again.
+const callGeminiWithRetry = async (
+	apiKey: string,
+	prompt: string,
+	options: Parameters<typeof callGemini>[2],
+): Promise<string | null> => {
+	const first = await callGemini(apiKey, prompt, options);
+	if (first) {
+		return first;
+	}
+
+	console.log("[Gemini] callGeminiWithRetry: first attempt failed, retrying");
+	return callGemini(apiKey, prompt, options);
+};
+
 export const generateSeasonStoryArticle = async (
 	tid: number,
 	season: number,
@@ -398,14 +421,19 @@ export const generateSeasonStoryArticle = async (
 	}
 
 	const factsText = formatGroundTruthText(groundTruth);
+	const { isComplete } = groundTruth.seasonProgress;
 
 	// Pass 1: outline
+	const outlineArcGuidance = isComplete
+		? "identify the season's narrative through-line and 4-6 chronological beats that tell its story: the setup, the turning point, the climax, and how it ended."
+		: "identify the season's narrative through-line SO FAR and 3-5 chronological beats: the setup, the turning point (if one has emerged), and where things stand right now. The season has NOT concluded -- do not invent an ending, a turning point that hasn't happened, or a final result.";
+
 	const outlinePrompt = `You are a veteran NBA beat writer planning a season retrospective for the ${groundTruth.teamName} covering the ${season} NBA season, for the team's hometown newspaper.
 
 GROUND TRUTH — the only facts you may use. Do not invent or assume anything beyond this:
 ${factsText}
 
-Based ONLY on the facts above, identify the season's narrative through-line and 4-6 chronological beats that tell its story: the setup, the turning point, the climax, and how it ended.
+Based ONLY on the facts above, ${outlineArcGuidance}
 
 Respond ONLY with valid JSON, no markdown fences:
 {
@@ -416,8 +444,9 @@ Respond ONLY with valid JSON, no markdown fences:
   ]
 }`;
 
-	const rawOutline = await callGemini(apiKey, outlinePrompt, {
+	const rawOutline = await callGeminiWithRetry(apiKey, outlinePrompt, {
 		temperature: 0.5,
+		timeoutMs: 30000,
 	});
 	if (!rawOutline) {
 		return null;
@@ -451,6 +480,13 @@ Respond ONLY with valid JSON, no markdown fences:
 		.map((b, i) => `${i + 1}. ${b.when}: ${b.what} — ${b.why_it_mattered}`)
 		.join("\n");
 
+	const proseStructureGuidance = isComplete
+		? "Structure: setup → turning point → climax → resolution, following the beats above in order."
+		: "Structure: setup → turning point (if any) → where things stand right now, following the beats above in order. This season is still in progress -- do NOT claim it has ended, been decided, or reached a resolution. Close with 2-3 sentences on what to watch for the rest of the season (trending strengths/weaknesses, a hot or cold streak, a player developing), grounded only in the facts given.";
+	const proseDevGuidance = isComplete
+		? ""
+		: "\n6. If player development notes are listed above (breakthrough seasons, mentorship, development focus), weave at least one in -- it's exactly the kind of forward-looking color that fits an in-progress storyline.";
+
 	const prosePrompt = `You are a veteran NBA beat writer writing a season retrospective for the ${groundTruth.teamName}, covering the ${season} NBA season, for the team's hometown newspaper.
 
 GROUND TRUTH — the only facts you may use. Do not invent or assume any score, stat, trade, or event not listed here:
@@ -465,16 +501,17 @@ ${beatsText}
 Instructions:
 1. Write ONLY from the facts given above. Never invent a score, stat, quote, trade, or player not listed.
 2. 600-900 words, veteran beat-writer voice.
-3. Structure: setup → turning point → climax → resolution, following the beats above in order.
+3. ${proseStructureGuidance}
 4. Weave in the exact stats/records/scores given, without rounding or altering any numbers.
-5. Write in prose paragraphs separated by blank lines. No headers, no bullet points, no markdown formatting.
+5. Write in prose paragraphs separated by blank lines. No headers, no bullet points, no markdown formatting.${proseDevGuidance}
 
 Write the retrospective now.`;
 
-	const rawArticle = await callGemini(apiKey, prosePrompt, {
+	const rawArticle = await callGeminiWithRetry(apiKey, prosePrompt, {
 		temperature: 0.7,
 		thinkingLevel: "medium",
 		maxOutputTokens: 8192,
+		timeoutMs: 30000,
 	});
 	if (!rawArticle) {
 		return null;

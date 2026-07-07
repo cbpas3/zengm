@@ -1,6 +1,7 @@
 import { idb } from "../db/index.ts";
 import { g, helpers, getTeamInfoBySeason } from "./index.ts";
 import getPlayoffsByConf from "../core/season/getPlayoffsByConf.ts";
+import { PHASE } from "../../common/constants.ts";
 import type {
 	DevFocusType,
 	EventBBGM,
@@ -47,6 +48,12 @@ export type SeasonGroundTruth = {
 	record: { won: number; lost: number; tied: number; otl: number };
 	seed: number | undefined;
 	howSeasonEnded: string;
+	seasonProgress: {
+		isComplete: boolean;
+		gamesPlayed: number;
+		numGamesRegularSeason: number;
+		description: string;
+	};
 	playoffSeries: {
 		round: number;
 		opponentAbbrev: string;
@@ -94,6 +101,30 @@ export const buildSeasonGroundTruth = async (
 		playoffsByConf,
 		showMissedPlayoffs: true,
 	});
+
+	// A season isn't "over" just because it's the one currently loaded -- the
+	// user can ask for a story mid-regular-season or mid-playoffs. Detect that
+	// so the prompt doesn't tell Gemini to write a resolved ending (e.g.
+	// "missed playoffs") for a team that's still 40 games from finding out.
+	const currentSeason = g.get("season");
+	const currentPhase = g.get("phase");
+	const isComplete =
+		season < currentSeason ||
+		(season === currentSeason && currentPhase >= PHASE.DRAFT_LOTTERY);
+	const gamesPlayed =
+		teamSeason.won + teamSeason.lost + teamSeason.tied + teamSeason.otl;
+	const numGamesRegularSeason = g.get("numGames", season);
+
+	let seasonProgressDescription: string;
+	if (isComplete) {
+		seasonProgressDescription = "Season complete.";
+	} else if (currentPhase === PHASE.PRESEASON) {
+		seasonProgressDescription = "Season has not started yet.";
+	} else if (currentPhase === PHASE.PLAYOFFS) {
+		seasonProgressDescription = `Regular season complete (${teamSeason.won}-${teamSeason.lost}); currently in the playoffs, ${howSeasonEnded || "not yet eliminated"}.`;
+	} else {
+		seasonProgressDescription = `${gamesPlayed} of ${numGamesRegularSeason} regular-season games played so far (record: ${teamSeason.won}-${teamSeason.lost}). The season is ongoing.`;
+	}
 
 	// Playoff series results + seed, from the playoffSeries store
 	let seed: number | undefined;
@@ -410,6 +441,12 @@ export const buildSeasonGroundTruth = async (
 		},
 		seed,
 		howSeasonEnded,
+		seasonProgress: {
+			isComplete,
+			gamesPlayed,
+			numGamesRegularSeason,
+			description: seasonProgressDescription,
+		},
 		playoffSeries,
 		regularSeasonArc,
 		teamLeaders,
@@ -421,6 +458,9 @@ export const buildSeasonGroundTruth = async (
 
 export const formatGroundTruthText = (gt: SeasonGroundTruth): string => {
 	const recordText = `${gt.record.won}-${gt.record.lost}${gt.record.tied ? `-${gt.record.tied}T` : ""}${gt.record.otl ? `-${gt.record.otl}OTL` : ""}`;
+	const recordLabel = gt.seasonProgress.isComplete
+		? "Final record"
+		: "Current record";
 
 	const playoffSeriesText =
 		gt.playoffSeries.length > 0
@@ -430,7 +470,13 @@ export const formatGroundTruthText = (gt: SeasonGroundTruth): string => {
 							`- Round ${s.round} vs ${s.opponentAbbrev}: ${s.won}-${s.lost} (${s.seriesWon ? "won series" : "lost series"})`,
 					)
 					.join("\n")
-			: "- Did not make the playoffs";
+			: gt.seasonProgress.isComplete
+				? "- Did not make the playoffs"
+				: "- Playoffs have not started yet (or team has not clinched a spot)";
+
+	const statusText = gt.seasonProgress.isComplete
+		? `How the season ended: ${gt.howSeasonEnded}`
+		: `Season status: IN PROGRESS -- ${gt.seasonProgress.description} Do not describe this season as finished, decided, or resolved -- write about where things stand right now.`;
 
 	const arcText = gt.regularSeasonArc
 		? [
@@ -473,11 +519,18 @@ export const formatGroundTruthText = (gt: SeasonGroundTruth): string => {
 			? gt.devNotes.map((n) => `- ${n}`).join("\n")
 			: "- Nothing notable";
 
+	const seedText =
+		gt.seed !== undefined
+			? `#${gt.seed}`
+			: gt.seasonProgress.isComplete
+				? "did not make playoffs"
+				: "not yet determined";
+
 	return `Team: ${gt.teamName} (${gt.abbrev})
 Season: ${gt.season}
-Final record: ${recordText}
-Seed: ${gt.seed !== undefined ? `#${gt.seed}` : "did not make playoffs"}
-How the season ended: ${gt.howSeasonEnded}
+${recordLabel}: ${recordText}
+Seed: ${seedText}
+${statusText}
 
 Playoff series results:
 ${playoffSeriesText}
