@@ -39,9 +39,11 @@ const DEV_PROFILE_STYLE: Record<
 const PlayerDevelopmentControls = ({
 	p,
 	players,
+	godMode = false,
 }: {
 	p: Player;
 	players: Player[];
+	godMode?: boolean;
 }) => {
 	const availableMentors = players
 		.filter((m) => m.pid !== p.pid && m.age >= 28)
@@ -125,42 +127,83 @@ const PlayerDevelopmentControls = ({
 				</select>
 			) : null}
 
-			{(() => {
-				const ethic = (p as any).workEthic ?? "average";
-				const s = WORK_ETHIC_STYLE[ethic];
-				return (
-					<span
-						style={{
-							fontSize: "0.7rem",
-							padding: "1px 6px",
-							borderRadius: 4,
-							background: s.bg,
-							color: s.text,
-							alignSelf: "flex-start",
-						}}
-					>
-						{s.label}
-					</span>
-				);
-			})()}
-			{(() => {
-				const profile = (p as any).devProfile ?? "standard";
-				const s = DEV_PROFILE_STYLE[profile];
-				return (
-					<span
-						style={{
-							fontSize: "0.7rem",
-							padding: "1px 6px",
-							borderRadius: 4,
-							background: s.bg,
-							color: s.text,
-							alignSelf: "flex-start",
-						}}
-					>
-						{s.label}
-					</span>
-				);
-			})()}
+			{godMode ? (
+				<select
+					className="form-select form-select-sm"
+					value={(p as any).workEthic ?? "average"}
+					onChange={async (e) => {
+						await toWorker("main", "updatePlayerDevelopment", {
+							pid: p.pid,
+							workEthic: e.target.value as any,
+						});
+					}}
+					title="Work ethic"
+				>
+					{Object.entries(WORK_ETHIC_STYLE).map(([val, { label }]) => (
+						<option key={val} value={val}>
+							{label}
+						</option>
+					))}
+				</select>
+			) : (
+				(() => {
+					const ethic = (p as any).workEthic ?? "average";
+					const s = WORK_ETHIC_STYLE[ethic];
+					return (
+						<span
+							style={{
+								fontSize: "0.7rem",
+								padding: "1px 6px",
+								borderRadius: 4,
+								background: s.bg,
+								color: s.text,
+								alignSelf: "flex-start",
+							}}
+						>
+							{s.label}
+						</span>
+					);
+				})()
+			)}
+
+			{godMode ? (
+				<select
+					className="form-select form-select-sm"
+					value={(p as any).devProfile ?? "standard"}
+					onChange={async (e) => {
+						await toWorker("main", "updatePlayerDevelopment", {
+							pid: p.pid,
+							devProfile: e.target.value as any,
+						});
+					}}
+					title="Dev profile"
+				>
+					{Object.entries(DEV_PROFILE_STYLE).map(([val, { label }]) => (
+						<option key={val} value={val}>
+							{label}
+						</option>
+					))}
+				</select>
+			) : (
+				(() => {
+					const profile = (p as any).devProfile ?? "standard";
+					const s = DEV_PROFILE_STYLE[profile];
+					return (
+						<span
+							style={{
+								fontSize: "0.7rem",
+								padding: "1px 6px",
+								borderRadius: 4,
+								background: s.bg,
+								color: s.text,
+								alignSelf: "flex-start",
+							}}
+						>
+							{s.label}
+						</span>
+					);
+				})()
+			)}
 		</div>
 	);
 };

@@ -75,6 +75,8 @@ You have deep knowledge of real NBA history. Factor in each player's actual repu
 
 Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words explaining why.`;
 
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 8000);
 	try {
 		const response = await fetch(
 			`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
@@ -85,7 +87,7 @@ Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words expl
 					contents: [{ parts: [{ text: prompt }] }],
 					generationConfig: { temperature: 0.2, maxOutputTokens: 80 },
 				}),
-				signal: AbortSignal.timeout(8000),
+				signal: controller.signal,
 			},
 		);
 
@@ -101,6 +103,8 @@ Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words expl
 		return { accepted, reason };
 	} catch {
 		return null;
+	} finally {
+		clearTimeout(timer);
 	}
 };
 
@@ -122,6 +126,8 @@ const callGemini = async (
 	prompt: string,
 ): Promise<string | null> => {
 	console.log("[Gemini] callGemini: starting fetch");
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 15000);
 	try {
 		const response = await fetch(
 			`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
@@ -132,7 +138,7 @@ const callGemini = async (
 					contents: [{ parts: [{ text: prompt }] }],
 					generationConfig: { temperature: 0.4, maxOutputTokens: 1200 },
 				}),
-				signal: AbortSignal.timeout(15000),
+				signal: controller.signal,
 			},
 		);
 
@@ -152,6 +158,8 @@ const callGemini = async (
 	} catch (err) {
 		console.log("[Gemini] callGemini: caught error", String(err));
 		return null;
+	} finally {
+		clearTimeout(timer);
 	}
 };
 

@@ -328,7 +328,11 @@ const Roster = ({
 				...(editable
 					? [
 							<PlayingTime p={p} userTid={userTid} />,
-							<PlayerDevelopmentControls p={p} players={players} />,
+							<PlayerDevelopmentControls
+								p={p}
+								players={players}
+								godMode={godMode}
+							/>,
 						]
 					: []),
 				...(showMood

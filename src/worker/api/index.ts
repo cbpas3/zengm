@@ -89,6 +89,7 @@ import type {
 	View,
 	NonEmptyArray,
 	DevFocusType,
+	DevProfileType,
 } from "../../common/types.ts";
 import {
 	addSimpleAndTeamAwardsToAwardsByPlayer,
@@ -4268,11 +4269,15 @@ const updatePlayerDevelopment = async ({
 	devOverride,
 	devFocus,
 	mentorPid,
+	workEthic,
+	devProfile,
 }: {
 	pid: number;
 	devOverride?: boolean;
 	devFocus?: DevFocusType | null;
 	mentorPid?: number | null;
+	workEthic?: "elite" | "high" | "average" | "low";
+	devProfile?: DevProfileType;
 }) => {
 	const p = await idb.cache.players.get(pid);
 	if (!p || p.tid !== g.get("userTid")) {
@@ -4324,6 +4329,16 @@ const updatePlayerDevelopment = async ({
 					}
 				}
 			}
+		}
+	}
+
+	// God-mode-only trait overrides
+	if (g.get("godMode")) {
+		if (workEthic !== undefined) {
+			p.workEthic = workEthic;
+		}
+		if (devProfile !== undefined) {
+			p.devProfile = devProfile;
 		}
 	}
 
