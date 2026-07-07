@@ -88,6 +88,8 @@ Stored in Global Settings under "AI Trade Realism" (basketball only). Saved to `
 
 `gemini-3.5-flash` (Stable/GA, released May 19, 2026 — most intelligent model available on the free tier). Switched from `gemini-3.1-flash-lite` on 2026-07-07 for better trade-realism reasoning; `gemini-3.1-flash-lite` remains the recommended fallback if free-tier daily limits are hit. Note: `gemini-3.1-pro-preview` is NOT free-tier eligible.
 
+**⚠️ Thinking-model gotcha:** unlike Flash-Lite, `gemini-3.5-flash` has thinking ON by default (`medium`), and thinking tokens are drawn from `maxOutputTokens`. A small cap (the old 80/1200 values) is entirely consumed by thinking → `finishReason: MAX_TOKENS` → empty `text` → silent fallback. Both calls therefore set `generationConfig.thinkingConfig.thinkingLevel: "low"` and raise `maxOutputTokens` (veto 2048, offers 8192). REST shape: `generationConfig: { thinkingConfig: { thinkingLevel: "low" } }` (values: `minimal | low | medium | high`).
+
 **API endpoint:**
 
 ```

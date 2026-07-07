@@ -76,7 +76,7 @@ You have deep knowledge of real NBA history. Factor in each player's actual repu
 Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words explaining why.`;
 
 	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), 8000);
+	const timer = setTimeout(() => controller.abort(), 10000);
 	try {
 		const response = await fetch(
 			`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
@@ -85,7 +85,13 @@ Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words expl
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					contents: [{ parts: [{ text: prompt }] }],
-					generationConfig: { temperature: 0.2, maxOutputTokens: 80 },
+					generationConfig: {
+						temperature: 0.2,
+						// gemini-3.5-flash thinks by default (medium); thinking tokens
+						// draw from maxOutputTokens, so a tiny cap yields empty text.
+						maxOutputTokens: 2048,
+						thinkingConfig: { thinkingLevel: "low" },
+					},
 				}),
 				signal: controller.signal,
 			},
@@ -127,7 +133,7 @@ const callGemini = async (
 ): Promise<string | null> => {
 	console.log("[Gemini] callGemini: starting fetch");
 	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), 15000);
+	const timer = setTimeout(() => controller.abort(), 20000);
 	try {
 		const response = await fetch(
 			`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
@@ -136,7 +142,14 @@ const callGemini = async (
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					contents: [{ parts: [{ text: prompt }] }],
-					generationConfig: { temperature: 0.4, maxOutputTokens: 1200 },
+					generationConfig: {
+						temperature: 0.4,
+						// gemini-3.5-flash thinks by default (medium); thinking tokens
+						// draw from maxOutputTokens. Budget generously for thinking +
+						// the ~1.2k-token JSON, and keep thinking low for latency.
+						maxOutputTokens: 8192,
+						thinkingConfig: { thinkingLevel: "low" },
+					},
 				}),
 				signal: controller.signal,
 			},
@@ -149,10 +162,13 @@ const callGemini = async (
 			return null;
 		}
 		const data = await response.json();
-		const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+		const cand = data?.candidates?.[0];
+		const text = cand?.content?.parts?.[0]?.text ?? null;
 		console.log(
 			"[Gemini] callGemini: got text",
 			text ? text.slice(0, 100) : null,
+			"finishReason",
+			cand?.finishReason,
 		);
 		return text;
 	} catch (err) {
