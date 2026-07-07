@@ -125,7 +125,7 @@ const categories: Category[] = [
 	{
 		name: "games",
 		title: "Box scores",
-		desc: "Box scores take up tons of space, but by default only three seasons are saved.",
+		desc: "Box scores take up tons of space; how many seasons are saved depends on your Save Old Box Scores setting.",
 		default: false,
 	},
 ];

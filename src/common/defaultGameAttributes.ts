@@ -379,7 +379,7 @@ const defaultGameAttributes: GameAttributesLeagueWithHistory = {
 	tradeProposalsSeed: 0,
 	rpdPot: true,
 	saveOldBoxScores: {
-		pastSeasons: 2,
+		pastSeasons: 100,
 		pastSeasonsType: "all",
 		note: "all",
 	},
