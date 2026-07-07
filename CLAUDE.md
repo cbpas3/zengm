@@ -86,12 +86,12 @@ Stored in Global Settings under "AI Trade Realism" (basketball only). Saved to `
 
 ### Model
 
-`gemini-3.1-flash-lite` (GA as of May 25, 2026 — the `-preview` suffix was retired on that date)
+`gemini-3.5-flash` (Stable/GA, released May 19, 2026 — most intelligent model available on the free tier). Switched from `gemini-3.1-flash-lite` on 2026-07-07 for better trade-realism reasoning; `gemini-3.1-flash-lite` remains the recommended fallback if free-tier daily limits are hit. Note: `gemini-3.1-pro-preview` is NOT free-tier eligible.
 
 **API endpoint:**
 
 ```
-https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=<KEY>
+https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=<KEY>
 ```
 
 ### Key files
