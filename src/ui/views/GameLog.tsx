@@ -1,7 +1,9 @@
 import clsx from "clsx";
+import { useState } from "react";
 import { MoreLinks } from "../components/MoreLinks.tsx";
 import useTitleBar from "../hooks/useTitleBar.tsx";
 import { helpers } from "../util/helpers.ts";
+import { toWorker } from "../util/toWorker.ts";
 import useClickable from "../hooks/useClickable.tsx";
 import type { View, Game } from "../../common/types.ts";
 import { bySport, isSport } from "../../common/sportFunctions.ts";
@@ -9,6 +11,7 @@ import getWinner from "../../common/getWinner.ts";
 import formatScoreWithShootout from "../../common/formatScoreWithShootout.ts";
 import { BoxScoreWrapper } from "../components/BoxScoreWrapper.tsx";
 import { BoxScoreRow } from "../components/BoxScoreRow.tsx";
+import { ActionButton } from "../components/ActionButton.tsx";
 
 const StatsRow = ({ p, ...props }: { i: number; p: any; season: number }) => {
 	const { clicked, toggleClicked } = useClickable();
@@ -157,6 +160,67 @@ const GamesList = ({
 	);
 };
 
+const GameRecap = ({ gid }: { gid: number }) => {
+	const [state, setState] = useState<{
+		requested: boolean;
+		generating: boolean;
+		article: string | null;
+		usedFallback: boolean;
+	}>({
+		requested: false,
+		generating: false,
+		article: null,
+		usedFallback: false,
+	});
+
+	const handleClick = async () => {
+		setState((prevState) => ({ ...prevState, generating: true }));
+
+		const result = await toWorker("main", "generateGameArticle", { gid });
+
+		setState({
+			requested: true,
+			generating: false,
+			article: result.article,
+			usedFallback: result.usedFallback,
+		});
+	};
+
+	const paragraphs = state.article
+		? state.article
+				.split(/\n\s*\n/)
+				.filter((paragraph) => paragraph.trim() !== "")
+		: [];
+
+	return (
+		<div className="mt-3">
+			<ActionButton
+				processing={state.generating}
+				onClick={handleClick}
+				variant="secondary"
+				processingText="Writing"
+			>
+				{state.article ? "Regenerate recap" : "Generate recap"}
+			</ActionButton>
+
+			{state.requested && state.usedFallback ? (
+				<div className="alert alert-warning mt-2 d-inline-block ms-2">
+					AI recap unavailable — set a Gemini API key on the{" "}
+					<a href="/settings">Global Settings</a> page, or try again.
+				</div>
+			) : null}
+
+			{paragraphs.length > 0 ? (
+				<div className="mt-3" style={{ maxWidth: 800 }}>
+					{paragraphs.map((paragraph, i) => (
+						<p key={i}>{paragraph.replace(/\s*\n\s*/g, " ")}</p>
+					))}
+				</div>
+			) : null}
+		</div>
+	);
+};
+
 const GameLog = ({
 	abbrev,
 	boxScore,
@@ -231,6 +295,7 @@ const GameLog = ({
 							) : (
 								<p>Select a game from the menu to view a box score.</p>
 							)}
+							{boxScore.gid >= 0 ? <GameRecap gid={boxScore.gid} /> : null}
 						</div>
 
 						<div className="col-md-2 mt-3 mt-md-0">

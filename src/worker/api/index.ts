@@ -163,7 +163,9 @@ import { getNumPlayersTradedAwayNormalizedAll } from "../core/player/getNumPlaye
 import { getAdjustedTicketPrice } from "../../common/getAdjustedTicketPrice.ts";
 import { gameAttributesArrayToObject } from "../../common/gameAttributesArrayToObject.ts";
 import { bySport, isSport } from "../../common/sportFunctions.ts";
-import { generateTradingBlockOffers } from "../util/gemini.ts";
+import { generateTradingBlockOffers, callGemini } from "../util/gemini.ts";
+import getGlobalSettings from "../util/getGlobalSettings.ts";
+import { boxScore as getGameBoxScore } from "../views/gameLog.ts";
 import { DEV_FOCUS_RATINGS } from "../core/player/developSeason.ts";
 
 const acceptContractNegotiation = async ({
@@ -2322,6 +2324,77 @@ const getTradingBlockOffers = async ({
 
 	const augmented = await augmentOffers(offers, reasonings);
 	return { offers: augmented, usedFallback };
+};
+
+const generateGameArticle = async ({ gid }: { gid: number }) => {
+	const settings = await getGlobalSettings();
+	const apiKey = settings.geminiApiKey;
+	if (!apiKey) {
+		return { article: null, usedFallback: true };
+	}
+
+	const game = await getGameBoxScore(gid);
+	if (!("teams" in game)) {
+		return { article: null, usedFallback: true };
+	}
+
+	const winnerTeam = (game.teams as any[]).find((t) => t.tid === game.won.tid);
+	const loserTeam = (game.teams as any[]).find((t) => t.tid === game.lost.tid);
+	if (!winnerTeam || !loserTeam) {
+		return { article: null, usedFallback: true };
+	}
+
+	const statLine = (p: any) =>
+		`${p.name} (${p.pos}): ${p.pts} pts, ${p.orb + p.drb} reb, ${p.ast} ast, ${p.stl} stl, ${p.blk} blk, ${p.fg}-${p.fga} FG, ${p.tp}-${p.tpa} 3PT, ${p.min.toFixed(1)} min`;
+
+	const topPerformers = (t: any) =>
+		(t.players as any[])
+			.filter((p) => p.min > 0)
+			.slice()
+			.sort((a, b) => b.pts - a.pts)
+			.slice(0, 3)
+			.map(statLine)
+			.join("\n");
+
+	const seriesText =
+		game.playoffs && winnerTeam.playoffs && loserTeam.playoffs
+			? `\n- This is a playoff game. Series record: ${winnerTeam.abbrev} ${winnerTeam.playoffs.won}-${winnerTeam.playoffs.lost}, ${loserTeam.abbrev} ${loserTeam.playoffs.won}-${loserTeam.playoffs.lost}.`
+			: "";
+
+	const prompt = `You are a beat writer covering the ${game.won.region} ${game.won.name} for their local newspaper, writing a game recap for a basketball simulation set in the ${game.season} NBA season.
+
+GROUND TRUTH — the only facts you may use. Do not invent or assume anything beyond this:
+- Final score: ${game.won.region} ${game.won.name} ${game.won.pts}, ${game.lost.region} ${game.lost.name} ${game.lost.pts}${game.overtime ? ` ${game.overtime}` : ""}
+- ${game.won.abbrev} record: ${game.won.won}-${game.won.lost}
+- ${game.lost.abbrev} record: ${game.lost.won}-${game.lost.lost}
+- Period-by-period score, ${winnerTeam.abbrev}: ${winnerTeam.ptsQtrs.join("-")}
+- Period-by-period score, ${loserTeam.abbrev}: ${loserTeam.ptsQtrs.join("-")}
+- Top performers, ${winnerTeam.abbrev}:
+${topPerformers(winnerTeam)}
+- Top performers, ${loserTeam.abbrev}:
+${topPerformers(loserTeam)}${seriesText}
+
+Instructions:
+1. Write ONLY from the facts above. Never invent a score, stat, quote, injury, or player not listed here.
+2. Persona: beat writer for the winning team's city (${game.won.region}).
+3. 3-5 paragraphs. Lead with the result and the decisive factor (use the top performers' stat lines above to identify it).
+4. Weave in the exact stat lines given, without rounding or altering any numbers.
+5. Reference each team's record to establish the stakes of the game.
+6. Write in prose paragraphs separated by blank lines. No headers, no bullet points, no markdown formatting.
+
+Write the recap now.`;
+
+	const raw = await callGemini(apiKey, prompt, { temperature: 0.7 });
+	if (!raw) {
+		return { article: null, usedFallback: true };
+	}
+
+	const article = raw
+		.replace(/^```(?:\w+)?\s*/, "")
+		.replace(/\s*```$/, "")
+		.trim();
+
+	return { article, usedFallback: false };
 };
 
 const ping = async () => {
@@ -5281,6 +5354,7 @@ export default {
 		exportPlayerAveragesCsv,
 		exportPlayerGamesCsv,
 		generateFace,
+		generateGameArticle,
 		getAutoPos,
 		getBornLoc,
 		getDefaultInjuries,

@@ -127,9 +127,10 @@ export type TradingBlockOffer = {
 	reasoning: string;
 };
 
-const callGemini = async (
+export const callGemini = async (
 	apiKey: string,
 	prompt: string,
+	options?: { temperature?: number },
 ): Promise<string | null> => {
 	console.log("[Gemini] callGemini: starting fetch");
 	const controller = new AbortController();
@@ -143,7 +144,7 @@ const callGemini = async (
 				body: JSON.stringify({
 					contents: [{ parts: [{ text: prompt }] }],
 					generationConfig: {
-						temperature: 0.4,
+						temperature: options?.temperature ?? 0.4,
 						// gemini-3.5-flash thinks by default (medium); thinking tokens
 						// draw from maxOutputTokens. Budget generously for thinking +
 						// the ~1.2k-token JSON, and keep thinking low for latency.

@@ -1,0 +1,154 @@
+- generic [ref=e2]:
+    - navigation [ref=e3]:
+        - generic [ref=e4]:
+            - button "Toggle navigation" [ref=e5] [cursor=pointer]
+            - link "Basketball GM" [ref=e7] [cursor=pointer]:
+                - /url: /
+            - generic [ref=e9]:
+                - link "Leagues" [ref=e11] [cursor=pointer]:
+                    - /url: /
+                - link "New League" [ref=e13] [cursor=pointer]:
+                    - /url: /new_league
+                - link "Exhibition Game" [ref=e15] [cursor=pointer]:
+                    - /url: /exhibition
+                - button "Tools" [ref=e17] [cursor=pointer]
+                - button "Help" [ref=e19] [cursor=pointer]
+            - link "Login/Register" [ref=e22] [cursor=pointer]:
+                - /url: /account/login_or_register
+                - generic [ref=e23]: 
+                - text: Login/Register
+    - generic [ref=e24]:
+        - navigation "side navigation" [ref=e25]:
+            - generic [ref=e26]:
+                - list [ref=e27]:
+                    - listitem [ref=e28]:
+                        - link "Leagues" [ref=e29] [cursor=pointer]:
+                            - /url: /
+                - list [ref=e30]:
+                    - listitem [ref=e31]:
+                        - link "New League" [ref=e32] [cursor=pointer]:
+                            - /url: /new_league
+                - list [ref=e33]:
+                    - listitem [ref=e34]:
+                        - link "Exhibition Game" [ref=e35] [cursor=pointer]:
+                            - /url: /exhibition
+                - generic [ref=e36] [cursor=pointer]:
+                    - generic [ref=e37]: 
+                    - text: Tools
+                - list [ref=e38]:
+                    - listitem [ref=e39]:
+                        - link "Achievements" [ref=e40] [cursor=pointer]:
+                            - /url: /achievements
+                    - listitem [ref=e41]:
+                        - generic [ref=e42] [cursor=pointer]: Screenshot
+                    - listitem [ref=e43]:
+                        - generic [ref=e44] [cursor=pointer]: Delete All Leagues
+                    - listitem [ref=e45]:
+                        - link "Global Settings" [ref=e46] [cursor=pointer]:
+                            - /url: /settings
+                - generic [ref=e47] [cursor=pointer]:
+                    - generic [ref=e48]: 
+                    - text: Help
+                - list [ref=e49]:
+                    - listitem [ref=e50]:
+                        - link "Manual" [ref=e51] [cursor=pointer]:
+                            - /url: https://basketball-gm.com/manual/
+                    - listitem [ref=e52]:
+                        - link "Custom Rosters" [ref=e53] [cursor=pointer]:
+                            - /url: https://basketball-gm.com/manual/customization/
+                    - listitem [ref=e54]:
+                        - link "Debugging" [ref=e55] [cursor=pointer]:
+                            - /url: https://basketball-gm.com/manual/debugging/
+                    - listitem [ref=e56]:
+                        - link "Changelog" [ref=e57] [cursor=pointer]:
+                            - /url: https://zengm.com/changelog/
+        - generic [ref=e61]:
+            - main [ref=e62]:
+                - generic [ref=e63]:
+                    - link "New league » Real players" [ref=e64] [cursor=pointer]:
+                        - /url: /new_league/real
+                        - text: New league
+                        - text: » Real players
+                    - link "New league » Random players" [ref=e65] [cursor=pointer]:
+                        - /url: /new_league/random
+                        - text: New league
+                        - text: » Random players
+                    - link "New league » Cross-era" [ref=e66] [cursor=pointer]:
+                        - /url: /new_league/cross_era
+                        - text: New league
+                        - text: » Cross-era
+                    - link "New league » Legends" [ref=e67] [cursor=pointer]:
+                        - /url: /new_league/legends
+                        - text: New league
+                        - text: » Legends
+                    - link "New league » Custom" [ref=e68] [cursor=pointer]:
+                        - /url: /new_league
+                        - text: New league
+                        - text: » Custom
+                    - link "Exhibition game" [ref=e69] [cursor=pointer]:
+                        - /url: /exhibition
+                    - link "Try our other sports sim games!" [ref=e70] [cursor=pointer]:
+                        - /url: https://zengm.com/
+                        - text: Try our other sports sim
+                        - text: games!
+            - contentinfo [ref=e71]:
+                - paragraph
+                - separator [ref=e72]
+                - generic [ref=e73]:
+                    - generic [ref=e74]:
+                        - link "About" [ref=e76] [cursor=pointer]:
+                            - /url: https://zengm.com/about/
+                        - generic [ref=e77]:
+                            - text: ·
+                            - link "Blog" [ref=e78] [cursor=pointer]:
+                                - /url: https://zengm.com/blog/
+                        - generic [ref=e79]:
+                            - text: ·
+                            - link "Contact" [ref=e80] [cursor=pointer]:
+                                - /url: https://zengm.com/contact/
+                        - generic [ref=e81]:
+                            - text: ·
+                            - link "Privacy" [ref=e82] [cursor=pointer]:
+                                - /url: https://zengm.com/privacy/
+                        - generic [ref=e83]:
+                            - text: ·
+                            - link "GitHub" [ref=e84] [cursor=pointer]:
+                                - /url: https://github.com/zengm-games/zengm
+                        - generic [ref=e85]:
+                            - text: ·
+                            - link "Reddit" [ref=e86] [cursor=pointer]:
+                                - /url: https://www.reddit.com/r/BasketballGM/
+                        - generic [ref=e87]:
+                            - text: ·
+                            - link "Discord" [ref=e88] [cursor=pointer]:
+                                - /url: https://zengm.com/discord/
+                    - generic [ref=e89]:
+                        - text: BBGM
+                        - link "v2026.07.07.0953" [ref=e90] [cursor=pointer]:
+                            - /url: https://zengm.com/changelog/
+    - generic:
+        - button "×" [ref=e91] [cursor=pointer]
+        - list:
+            - listitem:
+                - generic [ref=e92]:
+                    - button "×" [ref=e93] [cursor=pointer]
+                    - strong [ref=e94]: Changes since your last visit
+                    - generic [ref=e95]:
+                        - paragraph [ref=e96]:
+                            - strong [ref=e97]: v2026.06.25.0546
+                            - text: ": Updated real players rosters so you can start a league after the 2026 draft."
+                            - link "More details" [ref=e98] [cursor=pointer]:
+                                - /url: https://www.reddit.com/r/BasketballGM/comments/1uf9ije/version_202606250546_updated_real_players_rosters/
+                        - paragraph [ref=e99]:
+                            - strong [ref=e100]: v2026.06.20.0955
+                            - text: ": Added columns to the Hall of Fame table showing the number of MVPs and championships won. Thanks @aneeshg5!"
+                            - link "More details" [ref=e101] [cursor=pointer]:
+                                - /url: https://www.reddit.com/r/BasketballGM/comments/1ub5w72/two_little_ui_updates_in_version_202606200955/
+                        - paragraph [ref=e102]:
+                            - strong [ref=e103]: v2026.06.20.0955
+                            - text: ": Players' previous contracts are shown in the Re-sign Players table. Thanks @aneeshg5!"
+                            - link "More details" [ref=e104] [cursor=pointer]:
+                                - /url: https://www.reddit.com/r/BasketballGM/comments/1ub5w72/two_little_ui_updates_in_version_202606200955/
+                        - paragraph [ref=e105]:
+                            - link "...and many more changes" [ref=e106] [cursor=pointer]:
+                                - /url: https://zengm.com/changelog/

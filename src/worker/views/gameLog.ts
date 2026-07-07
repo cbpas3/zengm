@@ -125,7 +125,7 @@ export const makeAbbrevsUnique = <T extends { abbrev: string }>(
  * @param {number} gid Integer game ID for the box score (a negative number means no box score).
  * @return {Promise.Object} Resolves to an object containing the box score data (or a blank object).
  */
-const boxScore = async (gid: number) => {
+export const boxScore = async (gid: number) => {
 	const game = await idb.getCopy.games({ gid });
 
 	// If game doesn't exist (bad gid or deleted box scores), show nothing
