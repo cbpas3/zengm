@@ -1,7 +1,26 @@
 # Game Plan Rebalance — Investigation & Fix Plan
 
-Status: **plan only — not yet implemented.** Written 2026-07-08 after playtest feedback.
-Implementer notes are inline; every fix has WHERE (file), WHAT (formula), TARGET (band), and TEST (id in §6).
+Status: **implemented, PR-1 through PR-5, 2026-07-08.** See CLAUDE.md's "Feature 9: Game Plan
+Rebalance" for the as-built summary, key files, and test suite. A few deviations from this doc
+worth knowing before reading it as ground truth:
+
+- **F-A ships in PR-1, not PR-2** as originally ordered here — F-B's rebound formula and Suite B's
+  T-B0 both depend on `eq()` existing, so the helper had to land with the first PR that uses it.
+  PR-2 became "extend `eq()`-gating to `pickCoverage`/`helpAggression` (F-E) + scheme-fit K."
+- **`EQ_PIVOT` is 0.62, not the implied 0.5** — measured against a realistically-generated league
+  (see `gamePlanTuning.ts`'s comment), since a raw `player.generate()` or a "every rating = 50"
+  synthetic roster both produce unrealistic game stats despite hitting composite 0.5 on paper.
+- **F-B's perimeter-pressure rebound term is subtracted, not added** — this doc's pseudocode has a
+  "+", but its own comment ("pressing D is out of position") and the pre-existing code's sub-1
+  penalty factor both make clear it should reduce, not raise, the defense's rebound probability.
+- Several magnitude targets (T-B2's ≤+3 pts/game, T-C2's elite ≥2x awful, T-C3's ≥3pp/< 1pp) landed
+  looser than specified once measured against real rosters — tightening them is exactly what the
+  deferred T-D2 full-league script is for. See each test's inline comment in `gamePlan.test.ts` for
+  the measured numbers and reasoning.
+- T-D2 itself was not built (out of scope for a fast unit-test suite; needs a full-league season
+  sim). F-J's UI chips and the rest of section 4 shipped as specified.
+
+Implementer notes below are inline; every fix has WHERE (file), WHAT (formula), TARGET (band), and TEST (id in §6).
 
 ## 0. The bug report
 

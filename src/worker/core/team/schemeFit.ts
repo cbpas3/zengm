@@ -7,6 +7,7 @@
 // applied in GameSim.basketball's doShot alongside the existing game-plan reads.
 import type { DevFocusType } from "../../../common/types.ts";
 import { DEV_FOCUS_GAMEPLAN_AFFINITY } from "../player/developSeason.ts";
+import { GAME_PLAN_TUNING } from "../GameSim.basketball/gamePlanTuning.ts";
 
 export type SchemeFit = {
 	threePointer: number;
@@ -29,9 +30,11 @@ export type SchemeFitGamePlan = {
 	postPlay: number;
 };
 
-// How hard emphasis vs. capability mismatch swings efficiency - k=0.3 means a maxed-out slider
-// (100 or 0) against a fully mismatched roster (capability 0 or 1) swings about +/-7.5%.
-const K = 0.3;
+// How hard emphasis vs. capability mismatch swings efficiency - k=0.5 means a maxed-out slider
+// (100 or 0) against a fully mismatched roster (capability 0 or 1) swings about +/-12.5%. Raised
+// from 0.3 in PR-2 of the game plan rebalance (F-E in GAME_PLAN_REBALANCE_PLAN.md) so leaning a
+// shot-mix slider into a mismatched roster has real teeth.
+const K = GAME_PLAN_TUNING.SCHEME_FIT_K;
 
 // Optional dev-focus bonus: small additional swing (on top of K above) when players whose
 // archetype affinity matches a slider are on a plan that leans into it. Capped so a stacked

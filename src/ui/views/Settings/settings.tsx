@@ -1384,6 +1384,14 @@ export const settings: Setting[] = (
 		},
 		{
 			category: "Challenge Modes",
+			key: "aiGamePlans",
+			name: "AI Game Plans",
+			type: "bool",
+			description:
+				"AI teams set their own game plan based on their roster's strengths (three-point rate from shooting, perimeter pressure from perimeter defense, rebounding-glass emphasis from rebounding, transition from pace, and ball movement from how usage-dominant their best player is), instead of always running a neutral plan with every dial at 50. Contending teams lean harder into their personnel than rebuilding teams. Turning this off makes AI teams easier, since their game plan sliders will always be exploitable by yours.",
+		},
+		{
+			category: "Challenge Modes",
 			key: "challengeSisyphusMode",
 			name: "Sisyphus Mode",
 			type: "bool",

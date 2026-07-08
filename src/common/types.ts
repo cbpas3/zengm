@@ -752,6 +752,7 @@ export type GameAttributesLeague = {
 	schemeFit: boolean;
 	teamChemistry: boolean;
 	inSeriesAdjustments: boolean;
+	aiGamePlans: boolean;
 	currencyFormat: [string, "." | ",", string];
 	overtimeLength: number;
 	overtimeLengthPlayoffs: number | null;

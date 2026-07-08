@@ -417,6 +417,7 @@ export const getDefaultSettings = () => {
 			defaultGameAttributes,
 			"inSeriesAdjustments",
 		),
+		aiGamePlans: unwrapGameAttribute(defaultGameAttributes, "aiGamePlans"),
 		saveOldBoxScores: unwrapGameAttribute(
 			defaultGameAttributes,
 			"saveOldBoxScores",

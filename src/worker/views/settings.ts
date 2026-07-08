@@ -175,6 +175,7 @@ type Key =
 	| "schemeFit"
 	| "teamChemistry"
 	| "inSeriesAdjustments"
+	| "aiGamePlans"
 	| "saveOldBoxScores"
 	| "currencyFormat"
 	| "overtimeLength"
@@ -400,6 +401,7 @@ const updateSettings = async (inputs: unknown, updateEvents: UpdateEvents) => {
 			schemeFit: g.get("schemeFit"),
 			teamChemistry: g.get("teamChemistry"),
 			inSeriesAdjustments: g.get("inSeriesAdjustments"),
+			aiGamePlans: g.get("aiGamePlans"),
 			saveOldBoxScores: g.get("saveOldBoxScores"),
 			currencyFormat: g.get("currencyFormat"),
 			overtimeLength: g.get("overtimeLength"),

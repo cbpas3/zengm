@@ -12,6 +12,7 @@ ZenGM is an open-source sports management simulation. This fork adds:
 2. **Gemini AI Trade Engine** — Gemini Flash powers the trading block, acting as all opposing GMs
 3. **AI Article Generation** — Gemini-written game recaps ("Way 1") and team season retrospectives ("Way 3")
 4. **Game Plan (Harder RPD Challenge, Phase 1)** — expanded offense/defense sliders (no LLM calls) that make converting foreknowledge into a dynasty require actual roster/scheme decisions, not just stacking stars
+5. **Game Plan Rebalance** — talent-gates every possession-economy dial (F-A's `eq()` execution-quality helper) so cranking a slider without the personnel to back it up is neutral-to-negative EV instead of a free win, fixes the exploit that let a 24 OVR team with every dial maxed go 71-11, and gives AI teams their own personnel-driven game plans
 
 ---
 
@@ -281,6 +282,10 @@ old 5-key `gamePlan` in the DB doesn't render `undefined`/`NaN` sliders for the 
 Phases 2–5 (positional-depth tax, scheme fit, team chemistry, in-series AI adjustments) have all
 since been built — see Features 5–8 below (and `CHALLENGE_FEATURES_PLAN.md` for the original plan).
 Phase 3 (scheme fit) and Phase 5 (in-series AI adjustments) both depend on the sliders added here.
+
+**Playtest found these sliders exploitable** (a 24 OVR team with every dial maxed went 71-11,
+since every possession-economy dial read zero player ratings) — see Feature 9 below for the
+talent-gated execution-quality rebalance that fixed this.
 
 ---
 
@@ -630,6 +635,173 @@ adjusted: switching everything on your pick-and-roll") was deliberately skipped:
 `Conditions` object threaded from `loadTeams` into `processTeam` (which doesn't currently receive
 one), a bigger plumbing change than the heuristic itself. Worth adding as a fast-follow if the
 adjustment ends up feeling invisible in practice.
+
+---
+
+## Feature 9: Game Plan Rebalance (Talent-Gated Execution)
+
+### What it does
+
+Fixes the exploit documented in `GAME_PLAN_REBALANCE_PLAN.md`: a 24 OVR team with every Game Plan
+dial (Feature 4) cranked went 71-11, because every possession-economy slider read zero player
+ratings — the sliders were power dials, not coaching decisions. This rebalance makes a dial's
+_benefit_ scale with whether the roster can actually execute it, while every dial's _cost_ stays
+ungated (design principle: "aggression is free to call, expensive to execute badly"). It also
+fixes the corollary bug that every AI team had `gamePlan === undefined` forever (the only write
+site was the user's own `updateGamePlan` endpoint), meaning the user's dials were being exploited
+against opponents who could never dial back and never paid the sliders' costs.
+
+Shipped as 5 independently-mergeable PRs, all landed:
+
+- **PR-1 — Stop the bleeding**: rebound contest rewrite (additive, not multiplicative — the old
+  factor-ratio math squared the intended swing into a ~25pp ORB% exploit), turnover-pressure
+  resize, transition fast-break magnitude cap, shot-mix slider ranges narrowed, `threePointRate`
+  now modulates the era factor instead of replacing it.
+- **PR-2 — Execution quality**: the `eq()` helper (F-A) wired into every possession dial;
+  `pickCoverage`/`helpAggression` restructured to be two-sided (both ends priced, both ends gated
+  by the composite they actually depend on); scheme-fit `K` raised 0.3 → 0.5.
+- **PR-3 — Usage curve** (the "Cade fix"): running ISO ball costs the shooter probMake and extra
+  energy drain, scaled by how far his usage-composite talent falls short of a true #1 option's.
+- **PR-4 — AI game plans**: every AI team gets a personnel-driven plan (`genAiGamePlan`) instead of
+  `gamePlan === undefined` forever; revives Phase 5 in-series adjustments (Feature 8), which were
+  dead code for AI teams for exactly that reason.
+- **PR-5 — UI honesty**: small execution-quality badges ("Elite execution" / "Average execution" /
+  "Poor execution") next to the possession-economy sliders in `GamePlanEditor.tsx`, so a dial that
+  silently underperforms doesn't just feel broken.
+
+### The `eq()` helper (F-A)
+
+```
+intent(slider) = (slider − 50) / 50                          // ∈ [−1, +1]
+eq(composite)  = bound(0.5 + 1.7 × (composite − 0.62), 0.25, 1.0)
+```
+
+`EQ_PIVOT = 0.62` (not the naively-expected 0.5) is empirically measured, not assumed: a raw
+`player.generate()` call produces an undeveloped ~19-year-old draft-prospect-quality player, and
+even a textbook-neutral "every rating = 50" synthetic roster produces wildly unrealistic game
+stats (25–30% FG, 30+ TOV/game) despite hitting composite = 0.5 exactly — this sim's actual
+in-game team composites (rebounding/defense/defensePerimeter/dribbling/passing/blocking, as
+`updateTeamCompositeRatings` computes them) cluster around 0.62 for a _realistically-generated_
+league-average roster (see `gamePlan.test.ts`'s harness, which builds rosters via the real
+`createRandomPlayers` league-creation pipeline specifically because of this). `EQ_SLOPE = 1.7`
+means an elite unit (composite ≳0.62 + 0.22) hits the `eq = 1.0` ceiling and an awful one (composite
+≲0.62 − 0.22) hits the `eq = 0.25` floor.
+
+Every possession dial's benefit multiplies by `eq()` of the composite it depends on; every dial's
+cost is ungated. All tuning constants (slopes, thresholds, the pivot) live in one file,
+`GAME_PLAN_TUNING`, so retuning is a one-file edit — see `gamePlanTuning.ts`'s per-constant
+comments for the reasoning behind each number, several of which needed real recalibration against
+measured sim behavior rather than the plan doc's initial guesses (e.g. `USAGE_THRESHOLD` and
+`USAGE_ISO_PENALTY_SLOPE` for F-F, both measured against the actual post-`**1.9` usage-composite
+distribution of a realistic league, not assumed).
+
+### Key mechanics by dial
+
+- **Rebounds** (`doReb`): additive delta on drb probability — `defensiveGlass`/`crashOffensiveGlass`
+  benefits gated by `eq(rebounding)` of the relevant team; `perimeterPressure`'s rebounding cost and
+  `pickCoverage`'s below-50 rebounding bonus stay ungated. Bounded to ±6pp total.
+- **Turnovers** (`probTov`, `getShotInfo`): `perimeterPressure`'s TOV benefit gated by
+  `eq(defensePerimeter)`; the foul-rate cost and a new "blown by the dribble → more rim attacks"
+  frequency cost stay ungated.
+- **Transition** (`getPossessionOutcome`, `doShot`): fast-break generation gated by `eq()` of the
+  on-court pace composite; ungated costs are an extra live-ball TOV roll (scaled by
+  `1 − eq(ballHandling)`) and extra shooter energy drain.
+- **`pickCoverage`/`helpAggression`** (`getShotInfo`, `usagePower`): fully two-sided now — e.g.
+  `pickCoverage` above 50 (switch/blitz) gates interior efficiency + usage dampening by
+  `eq(defensePerimeter)`, conceding 3PT frequency ungated; below 50 (drop) gates atRim efficiency by
+  `eq(blocking)`, conceding midrange frequency/efficiency ungated.
+- **Usage curve** (`getShotInfo`, `doShot`): `probMake -= USAGE_ISO_PENALTY_SLOPE × isoIntent ×
+max(0, USAGE_THRESHOLD − usageComposite)` when `ballMovement < 50` — a true #1 option
+  (usage composite at the league's real ceiling, ~0.55–0.59) pays ~nothing; a good-but-not-special
+  player pays a real efficiency cost. Plus a flat extra energy-drain cost on the shooter.
+- **Shot-mix sliders** (`threePointRate`/`rimAttack`/`postPlay`): frequency ranges narrowed to
+  0.6×–1.5× (was up to 12.5× for `threePointRate`); efficiency judged by scheme fit (Feature 6),
+  whose `K` is now 0.5.
+
+### AI game plans (`genAiGamePlan`, F-H)
+
+Pure function, `src/worker/core/team/genAiGamePlan.ts`: maps a team's composite ratings
+(`shootingThreePointer`, `defensePerimeter`, `rebounding`, `pace`, top-player `usage` dominance) to
+slider values via `50 + ((composite − EQ_PIVOT) / SPREAD) × 25`, clamped to ~25–75 (never an
+extreme — an AI plan reads as "leans into its roster," not "every dial maxed"). Contending teams
+amplify the deviation ×1.25 vs rebuilding teams. Only `threePointRate`, `perimeterPressure`,
+`crashOffensiveGlass`/`defensiveGlass`, `transition`, and `ballMovement` have explicit formulas;
+`pace`, `postPlay`, `rimAttack`, `pickCoverage`, `helpAggression` stay neutral 50 — deliberately
+conservative scope, matching exactly what the plan doc specified rather than inventing untested
+extra heuristics.
+
+Called from `processTeam` (`loadTeams.ts`) when `teamInput.gamePlan === undefined` for an AI team,
+gated behind the new `aiGamePlans` game attribute (default **on** — this is a fairness fix, not a
+difficulty toggle; without it AI teams stay exploitable regardless of the other Challenge Mode
+settings). The Phase 5 in-series-adjustment guard (Feature 8) no longer requires
+`gamePlan !== undefined` — every AI team now has _some_ plan (stored or AI-generated) to adjust, so
+Phase 5 is no longer dead code for AI teams.
+
+### UI (`GamePlanEditor.tsx`, F-J)
+
+`gamePlanExecution.ts` recomputes the same 4 team composites (rebounding/defense/defensePerimeter/
+blocking) plus pace from the current roster's top-8-healthy-by-rosterOrder players (raw ratings →
+`player.compositeRating`, since this view doesn't go through `processTeam`), maps each through
+`eq()` to a "Poor"/"Average"/"Elite" label, and plumbs it through `views/roster.ts` as
+`t2.gamePlanExecution` (current season only, same scoping as Feature 5's `RosterBalance`). Rendered
+as small colored badges next to the 6 possession-economy sliders whose benefit is `eq()`-gated
+(`transition`, `crashOffensiveGlass`, `pickCoverage`, `perimeterPressure`, `helpAggression`,
+`defensiveGlass`).
+
+### Test suite
+
+`src/worker/core/GameSim.basketball/gamePlan.test.ts` — the permanent statistical harness (Suites
+A–D from the plan doc's §6). Notable design decisions, all born from real flakiness/inaccuracy
+hit while building this:
+
+- Rosters are generated via the real `createRandomPlayers` league-creation pipeline (20 simulated
+  draft classes + `player.develop`), not raw `player.generate()` or synthetic uniform ratings —
+  both of the latter produce wildly unrealistic game stats even at "textbook average" composite
+  values (see EQ_PIVOT's derivation above).
+- Roster generation is seeded (a tiny `mulberry32` PRNG temporarily swapped in for `Math.random`)
+  so the file's calibration bands don't flake across separate test-process runs; game-simulation
+  randomness itself is deliberately left unseeded (that's the thing being statistically sampled).
+- Team 1 is a clone of team 0's roster (not independently generated) for the average-vs-average
+  suites, so gamePlan-only comparisons aren't confounded by roster asymmetry.
+- Suite C's "elite"/"awful"/"mid-tier" tids are picked by the _actual in-game value_ of the specific
+  composite a test cares about (constructing a real `GameSim` and reading
+  `compositeRating[key]`), not a generic OVR ranking or a static raw-ratings approximation — both
+  were tried first and found not to correlate reliably with what `eq()` actually reads.
+- `aiGamePlans` is forced off in the shared test harness (`resetG`'s `userTids: [0]` makes tid 1
+  an "AI team," which would otherwise get an F-H-generated plan instead of actually staying
+  `gamePlan: undefined`) — Suite D's tests turn it back on explicitly to test F-H itself.
+- T-D2 (a full-league season script: Spearman corr(OVR, wins) ≥ 0.65, etc.) is intentionally not
+  implemented — it needs hundreds of games across 30 teams, out of place in an otherwise-fast unit
+  suite. Follow the `genRatings.test.ts` `describe.skip` pattern if it gets built out later.
+
+`src/worker/core/team/genAiGamePlan.test.ts` — pure unit tests on the AI plan generator itself (no
+roster/GameSim harness needed).
+
+### Key files
+
+| File                                                   | Role                                                                                                  |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `GAME_PLAN_REBALANCE_PLAN.md`                          | The original investigation + fix spec this feature implements                                         |
+| `src/worker/core/GameSim.basketball/gamePlanTuning.ts` | `GAME_PLAN_TUNING`, `eq`, `intent`, `clampScheme` — the F-A helper + F-I rails                        |
+| `src/worker/core/GameSim.basketball/index.ts`          | `doReb`, `probTov`, `getPossessionOutcome`, `getShotInfo`, `doShot` — all the talent-gated sim wiring |
+| `src/worker/core/team/schemeFit.ts`                    | `K` raised 0.3 → 0.5                                                                                  |
+| `src/worker/core/team/genAiGamePlan.ts`                | F-H — the pure AI game-plan generator                                                                 |
+| `src/worker/core/team/gamePlanExecution.ts`            | F-J — execution-quality labels for the UI                                                             |
+| `src/worker/core/team/inSeriesAdjustments.ts`          | `NEUTRAL_GAME_PLAN` export (fallback for Phase 5 when `aiGamePlans` is off)                           |
+| `src/worker/core/game/loadTeams.ts`                    | `processTeam` — AI-gen + Phase 5 resolution order; revived guard                                      |
+| `src/common/types.ts` / `defaultGameAttributes.ts`     | `aiGamePlans` game attribute (default `true`)                                                         |
+| `src/ui/views/Roster/GamePlanEditor.tsx`               | Execution-quality badges                                                                              |
+| `src/worker/views/roster.ts`                           | `t2.gamePlanExecution` plumbing                                                                       |
+| `src/worker/core/GameSim.basketball/gamePlan.test.ts`  | Suites A–D                                                                                            |
+| `src/worker/core/team/genAiGamePlan.test.ts`           | T-D1                                                                                                  |
+
+### Future work
+
+T-D2 (full-league tuning-pass script) and further magnitude tuning against it — several constants
+in `GAME_PLAN_TUNING` were calibrated against two real rosters rather than a full 30-team season,
+and the plan doc's own aspirational targets (e.g. all-dials-maxed swing ≤ +3 pts/100, currently
+tighter than the pre-rebalance state but still measured at ≤ +8) call for a proper tuning pass once
+that script exists.
 
 ---
 

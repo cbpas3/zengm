@@ -18,6 +18,7 @@ import {
 import getWinner from "../../../common/getWinner.ts";
 import { formatClock } from "../../../common/formatClock.ts";
 import PlayByPlayLogger from "./PlayByPlayLogger.ts";
+import { GAME_PLAN_TUNING, clampScheme, eq, intent } from "./gamePlanTuning.ts";
 
 const SHOT_CLOCK = 24;
 // const NUM_TIMEOUTS_MAX_FINAL_PERIOD = 4;
@@ -1584,11 +1585,30 @@ class GameSim extends GameSimBase {
 		let fastBreak = false;
 		if (isTransitionOpportunity) {
 			const transitionSlider = this.team[this.o]!.gamePlan?.transition ?? 50;
-			let probFastBreak = 0.22 * (0.5 + transitionSlider / 100);
+
+			// eqTransition: execution quality of the pace-relevant composite of the players
+			// actually on the court right now - only a team built to run turns the dial into a
+			// real fast-break rate bump (see F-D in GAME_PLAN_REBALANCE_PLAN.md).
+			let paceComposite = 0;
+			for (let i = 0; i < this.numPlayersOnCourt; i++) {
+				paceComposite += this.playersOnCourt[this.o][i]!.compositeRating.pace;
+			}
+			paceComposite /= this.numPlayersOnCourt;
+			const eqTransition = eq(paceComposite);
+
+			let probFastBreak =
+				GAME_PLAN_TUNING.FAST_BREAK_BASE_PROB *
+				(1 +
+					GAME_PLAN_TUNING.FAST_BREAK_INTENT_SLOPE *
+						intent(transitionSlider) *
+						eqTransition);
 			if (this.prevPossessionOutcome === "drb") {
 				const crashSlider =
 					this.team[this.d]!.gamePlan?.crashOffensiveGlass ?? 50;
-				probFastBreak *= 1 + (Math.max(0, crashSlider - 50) / 50) * 0.2;
+				probFastBreak *=
+					1 +
+					(Math.max(0, crashSlider - 50) / 50) *
+						GAME_PLAN_TUNING.FAST_BREAK_CRASH_BONUS_SLOPE;
 			}
 			fastBreak = Math.random() < probFastBreak;
 		}
@@ -1686,10 +1706,17 @@ class GameSim extends GameSimBase {
 				: 1.25;
 
 		// High pick coverage (switch/blitz everything) takes away the offense's ability to just
-		// keep feeding their best player into a mismatch
+		// keep feeding their best player into a mismatch - gated by how well this defense executes
+		// a switch scheme (eq(defensePerimeter)). Dropped coverage (below 50) conceding *more* usage
+		// to the offense's star is the mirror-image cost, and stays ungated (see F-E).
 		const pickCoverage = defTeam.gamePlan?.pickCoverage ?? 50;
+		const intentPickCoverageUsage = intent(pickCoverage);
 		usagePower = helpers.bound(
-			usagePower - ((pickCoverage - 50) / 50) * 0.4,
+			usagePower -
+				Math.max(0, intentPickCoverageUsage) *
+					0.4 *
+					eq(defTeam.compositeRating.defensePerimeter) +
+				Math.max(0, -intentPickCoverageUsage) * 0.4,
 			0.5,
 			3,
 		);
@@ -1778,6 +1805,21 @@ class GameSim extends GameSimBase {
 			this.advanceClockSeconds(dt);
 		}
 
+		// A fast break carries extra live-ball turnover risk - pushing the pace exposes bad ball
+		// handlers. Ungated cost (see F-D in GAME_PLAN_REBALANCE_PLAN.md).
+		if (fastBreak) {
+			const ballHandling =
+				(offTeam.compositeRating.dribbling + offTeam.compositeRating.passing) /
+				2;
+			const probTovFastBreak =
+				GAME_PLAN_TUNING.FAST_BREAK_TOV_BASE +
+				GAME_PLAN_TUNING.FAST_BREAK_TOV_BALLHANDLING_SLOPE *
+					(1 - eq(ballHandling));
+			if (Math.random() < probTovFastBreak) {
+				return this.doTov();
+			}
+		}
+
 		// Shot!
 		return this.doShot(
 			shooter,
@@ -1795,10 +1837,17 @@ class GameSim extends GameSimBase {
 	 * @return {number} Probability from 0 to 1.
 	 */
 	probTov() {
-		// High perimeter pressure forces more live-ball turnovers
+		// High perimeter pressure forces more live-ball turnovers, gated by how good this defense
+		// actually is at pressuring the ball (eq(defensePerimeter)) - an elite perimeter defense
+		// forces real giveaways, a bad one mostly just fouls (see the ungated foul-rate cost below).
 		const perimeterPressure =
 			this.team[this.d]!.gamePlan?.perimeterPressure ?? 50;
-		const perimeterPressureFactor = 1 + ((perimeterPressure - 50) / 50) * 0.15;
+		const perimeterPressureFactor = clampScheme(
+			1 +
+				GAME_PLAN_TUNING.PRESSURE_TOV_SLOPE *
+					intent(perimeterPressure) *
+					eq(this.team[this.d]!.compositeRating.defensePerimeter),
+		);
 
 		return boundProb(
 			((g.get("turnoverFactor") *
@@ -1906,22 +1955,98 @@ class GameSim extends GameSimBase {
 		tipInFromOutOfBounds: boolean;
 		putBack: boolean;
 	}) {
-		// Defensive game plan effects on the shot the offense ends up taking. High pick coverage
-		// (switch/blitz everything) and high help aggression (collapse on drives) both cut into
-		// interior efficiency and push the offense toward kicking the ball out for threes instead.
+		// Usage-efficiency curve (F-F, the "Cade fix"): running ISO ball (ballMovement < 50) feeds
+		// this shooter volume regardless of whether he's actually a true go-to option. A player
+		// whose usage-composite talent (already raised to the 1.9 power in processTeam - see
+		// usagePower in getPossessionOutcome) falls short of USAGE_THRESHOLD pays a probMake
+		// penalty proportional to both how hard the offense is leaning ISO and how far short he
+		// falls - a real #1 option (usage talent at/above the threshold) pays ~nothing.
+		const isoIntent = Math.max(
+			0,
+			-intent(this.team[this.o]!.gamePlan?.ballMovement ?? 50),
+		);
+		const usageOverload = Math.max(
+			0,
+			GAME_PLAN_TUNING.USAGE_THRESHOLD - p.compositeRating.usage,
+		);
+
+		// Defensive game plan effects on the shot the offense ends up taking. Both pickCoverage and
+		// helpAggression are two-sided (F-E in GAME_PLAN_REBALANCE_PLAN.md): each end's benefit is
+		// gated by the execution quality of the composite rating it actually depends on, while each
+		// end's cost is ungated (a defense can always choose to concede something, it just can't
+		// always execute the upside for free).
 		const defGamePlan = this.team[this.d]!.gamePlan;
+		const defTeam = this.team[this.d]!;
 		const pickCoverage = defGamePlan?.pickCoverage ?? 50;
 		const helpAggression = defGamePlan?.helpAggression ?? 50;
-		const pickCoverageInteriorFactor =
-			1 - (Math.max(0, pickCoverage - 50) / 50) * 0.1;
-		const helpAggressionAtRimFactor =
-			1 - (Math.max(0, helpAggression - 50) / 50) * 0.12;
-		const helpAggressionThreeEfficiencyFactor =
-			1 + (Math.max(0, helpAggression - 50) / 50) * 0.08;
+		const intentPickCoverage = intent(pickCoverage);
+		const intentHelpAggression = intent(helpAggression);
+		const defensePerimeterEq = eq(defTeam.compositeRating.defensePerimeter);
+		const blockingEq = eq(defTeam.compositeRating.blocking);
+		const defenseEq = eq(defTeam.compositeRating.defense);
+
+		// pickCoverage above 50 (switch/blitz): benefit is interior (atRim + lowPost) efficiency,
+		// gated by how well this defense's perimeter players actually execute a switch scheme; cost
+		// (ungated) is conceding more 3PT frequency, folded into threeFrequencyDefenseFactor below.
+		const pickCoverageAboveInteriorFactor =
+			1 -
+			GAME_PLAN_TUNING.PICK_COVERAGE_ABOVE_INTERIOR_SLOPE *
+				Math.max(0, intentPickCoverage) *
+				defensePerimeterEq;
+		// pickCoverage below 50 (drop): benefit is atRim-specific (rim protectors stay home), gated
+		// by shot-blocking/rim-protection talent; cost (ungated) is conceding midrange frequency
+		// and efficiency (the pull-up jumper the drop is designed to allow).
+		const pickCoverageBelowAtRimFactor =
+			1 -
+			GAME_PLAN_TUNING.PICK_COVERAGE_BELOW_ATRIM_SLOPE *
+				Math.max(0, -intentPickCoverage) *
+				blockingEq;
+		const pickCoverageBelowMidRangeFactor =
+			1 +
+			GAME_PLAN_TUNING.PICK_COVERAGE_BELOW_MIDRANGE_SLOPE *
+				Math.max(0, -intentPickCoverage);
+
+		// helpAggression above 50 (collapse): benefit is rim efficiency, gated by overall defense
+		// execution; cost (ungated) is conceding 3PT frequency and efficiency (the open kick-out).
+		const helpAggressionAboveRimFactor =
+			1 -
+			GAME_PLAN_TUNING.HELP_AGGRESSION_ABOVE_RIM_SLOPE *
+				Math.max(0, intentHelpAggression) *
+				defenseEq;
+		const helpAggressionAboveThreeEffFactor =
+			1 +
+			GAME_PLAN_TUNING.HELP_AGGRESSION_ABOVE_THREE_EFF_SLOPE *
+				Math.max(0, intentHelpAggression);
+		// helpAggression below 50 (stay home): benefit is 3PT efficiency (staying attached to
+		// shooters), gated by perimeter defense execution; cost (ungated) is conceding rim
+		// frequency (nobody helps on a drive).
+		const helpAggressionBelowThreeEffFactor =
+			1 -
+			GAME_PLAN_TUNING.HELP_AGGRESSION_BELOW_THREE_EFF_SLOPE *
+				Math.max(0, -intentHelpAggression) *
+				defensePerimeterEq;
+		const helpAggressionBelowRimFreqFactor =
+			1 +
+			GAME_PLAN_TUNING.HELP_AGGRESSION_BELOW_RIM_FREQ_SLOPE *
+				Math.max(0, -intentHelpAggression);
+
+		const helpAggressionThreeEfficiencyFactor = clampScheme(
+			helpAggressionAboveThreeEffFactor * helpAggressionBelowThreeEffFactor,
+		);
 		const threeFrequencyDefenseFactor =
 			1 +
-			(Math.max(0, pickCoverage - 50) / 50) * 0.08 +
-			(Math.max(0, helpAggression - 50) / 50) * 0.1;
+			Math.max(0, intentPickCoverage) *
+				GAME_PLAN_TUNING.PICK_COVERAGE_ABOVE_THREE_FREQ_SLOPE +
+			Math.max(0, intentHelpAggression) *
+				GAME_PLAN_TUNING.HELP_AGGRESSION_ABOVE_THREE_FREQ_SLOPE;
+
+		// Blow-by cost of high perimeter pressure: beaten off the dribble = more rim attacks.
+		// Ungated (a cost, not a benefit) - see F-C in GAME_PLAN_REBALANCE_PLAN.md.
+		const perimeterPressureForBlowBy = defGamePlan?.perimeterPressure ?? 50;
+		const perimeterPressureBlowByFactor =
+			1 +
+			Math.max(0, intent(perimeterPressureForBlowBy)) *
+				GAME_PLAN_TUNING.PRESSURE_BLOWBY_RIM_FREQ_SLOPE;
 
 		let shootingThreePointerScaled = p.compositeRating.shootingThreePointer;
 
@@ -1990,10 +2115,16 @@ class GameSim extends GameSimBase {
 			Math.random() <
 				0.67 *
 					shootingThreePointerScaled2 *
-					// Game plan overrides the era factor: lerp 0→0.2, 50→1.35 (neutral), 100→2.5
+					// Game plan modulates the era factor rather than replacing it: 0 -> x0.6,
+					// 50 -> era-neutral, 100 -> x1.4 (was a 0.2-2.5 lerp that fully overrode era
+					// realism - see F7/F-G in GAME_PLAN_REBALANCE_PLAN.md).
+					g.get("threePointTendencyFactor") *
 					(this.team[this.o]!.gamePlan !== undefined
-						? 0.2 + (this.team[this.o]!.gamePlan!.threePointRate / 100) * 2.3
-						: g.get("threePointTendencyFactor")) *
+						? GAME_PLAN_TUNING.THREE_POINT_RATE_MIN_MULT +
+							(GAME_PLAN_TUNING.THREE_POINT_RATE_MAX_MULT -
+								GAME_PLAN_TUNING.THREE_POINT_RATE_MIN_MULT) *
+								(this.team[this.o]!.gamePlan!.threePointRate / 100)
+						: 1) *
 					// Hard coverage and help defense both invite more kick-out threes
 					threeFrequencyDefenseFactor
 		) {
@@ -2018,22 +2149,41 @@ class GameSim extends GameSimBase {
 		} else {
 			const gp = this.team[this.o].gamePlan;
 
-			const r1 = 0.8 * Math.random() * p.compositeRating.shootingMidRange;
+			const r1 =
+				0.8 *
+				Math.random() *
+				p.compositeRating.shootingMidRange *
+				// Dropped pick coverage concedes the pull-up jumper it's designed to allow
+				pickCoverageBelowMidRangeFactor;
 			const r2 =
 				Math.random() *
 				(p.compositeRating.shootingAtRim +
 					this.synergyFactor *
 						(this.team[this.o].synergy.off - this.team[this.d].synergy.def)) * // Synergy makes easy shots either more likely or less likely
-				(gp !== undefined ? 0.5 + (gp.rimAttack / 100) * 1.5 : 1) *
+				(gp !== undefined
+					? GAME_PLAN_TUNING.RIM_ATTACK_MIN_MULT +
+						(GAME_PLAN_TUNING.RIM_ATTACK_MAX_MULT -
+							GAME_PLAN_TUNING.RIM_ATTACK_MIN_MULT) *
+							(gp.rimAttack / 100)
+					: 1) *
 				// A fast break biases shot selection heavily toward the rim
-				(fastBreak ? 1.4 : 1);
+				(fastBreak ? 1.4 : 1) *
+				// Beaten off the dribble by heavy perimeter pressure = more rim attacks
+				perimeterPressureBlowByFactor *
+				// Nobody helps on a drive when the defense stays home on shooters
+				helpAggressionBelowRimFreqFactor;
 
 			const r3 =
 				Math.random() *
 				(p.compositeRating.shootingLowPost +
 					this.synergyFactor *
 						(this.team[this.o].synergy.off - this.team[this.d].synergy.def)) * // Synergy makes easy shots either more likely or less likely
-				(gp !== undefined ? 0.3 + (gp.postPlay / 100) * 2.2 : 1);
+				(gp !== undefined
+					? GAME_PLAN_TUNING.POST_PLAY_MIN_MULT +
+						(GAME_PLAN_TUNING.POST_PLAY_MAX_MULT -
+							GAME_PLAN_TUNING.POST_PLAY_MIN_MULT) *
+							(gp.postPlay / 100)
+					: 1);
 
 			if (r1 > r2 && r1 > r3) {
 				// Two point jumper
@@ -2042,6 +2192,9 @@ class GameSim extends GameSimBase {
 				probMissAndFoul = 0.07;
 				probMake = p.compositeRating.shootingMidRange * 0.32 + 0.42;
 				probAndOne = 0.05;
+
+				// Dropped pick coverage concedes the pull-up jumper it's designed to allow
+				probMake *= clampScheme(pickCoverageBelowMidRangeFactor);
 			} else if (r2 > r3) {
 				// Dunk, fast break or half court
 				type = "atRim";
@@ -2050,8 +2203,13 @@ class GameSim extends GameSimBase {
 				probMake = p.compositeRating.shootingAtRim * 0.41 + 0.54;
 				probAndOne = 0.25;
 
-				// Staying attached through picks and collapsing to help both cut into rim efficiency
-				probMake *= pickCoverageInteriorFactor * helpAggressionAtRimFactor;
+				// Staying attached through picks, dropping to protect the rim, and collapsing to
+				// help all cut into rim efficiency (each gated by the execution it depends on)
+				probMake *= clampScheme(
+					pickCoverageAboveInteriorFactor *
+						pickCoverageBelowAtRimFactor *
+						helpAggressionAboveRimFactor,
+				);
 
 				// No healthy rim protector on the other end - easier finishes at the rim
 				probMake *= this.team[this.d]!.depthTax?.oppRim ?? 1;
@@ -2066,7 +2224,7 @@ class GameSim extends GameSimBase {
 				probMake = p.compositeRating.shootingLowPost * 0.32 + 0.34;
 				probAndOne = 0.15;
 
-				probMake *= pickCoverageInteriorFactor;
+				probMake *= clampScheme(pickCoverageAboveInteriorFactor);
 
 				// Scheme fit: does this team's post-scoring ability back up its post-play rate?
 				probMake *= this.team[this.o]!.schemeFit?.lowPost ?? 1;
@@ -2102,6 +2260,12 @@ class GameSim extends GameSimBase {
 					this.synergyFactor *
 						(this.team[this.o].synergy.off - this.team[this.d].synergy.def)) *
 				currentFatigue;
+
+			// Usage-efficiency curve (F-F): ISO ball beyond this shooter's actual go-to-option
+			// talent costs real efficiency, ungated (there's no "execution quality" that saves you
+			// from taking a bad shot you weren't built to take).
+			probMake -=
+				GAME_PLAN_TUNING.USAGE_ISO_PENALTY_SLOPE * isoIntent * usageOverload;
 
 			if (!tipInFromOutOfBounds) {
 				// Adjust probMake for end of quarter situations, where shot quality will be lower without much time
@@ -2140,6 +2304,38 @@ class GameSim extends GameSimBase {
 		// If it's a putback, override shooter selection with whoever got the last offensive rebound
 		if (putBack && this.lastOrbPlayer !== undefined) {
 			p = this.lastOrbPlayer;
+		}
+
+		// Running the break costs the shooter extra energy - ungated cost of the transition dial
+		// (see F-D in GAME_PLAN_REBALANCE_PLAN.md).
+		if (fastBreak) {
+			this.recordStat(
+				this.o,
+				p,
+				"energy",
+				-GAME_PLAN_TUNING.FAST_BREAK_SHOOTER_ENERGY_PENALTY,
+			);
+			if (p.stat.energy < 0) {
+				p.stat.energy = 0;
+			}
+		}
+
+		// Carrying an ISO-heavy load beyond this shooter's actual go-to-option talent also costs
+		// extra energy - ungated cost of the usage-efficiency curve (F-F).
+		const isoIntentForEnergy = Math.max(
+			0,
+			-intent(this.team[this.o]!.gamePlan?.ballMovement ?? 50),
+		);
+		if (isoIntentForEnergy > 0) {
+			this.recordStat(
+				this.o,
+				p,
+				"energy",
+				-GAME_PLAN_TUNING.USAGE_ISO_SHOOTER_ENERGY_PENALTY * isoIntentForEnergy,
+			);
+			if (p.stat.energy < 0) {
+				p.stat.energy = 0;
+			}
 		}
 
 		const currentFatigue = this.fatigue(p.stat.energy);
@@ -2902,21 +3098,40 @@ class GameSim extends GameSimBase {
 		const crashOffensiveGlass = oGamePlan?.crashOffensiveGlass ?? 50;
 		const defensiveGlass = dGamePlan?.defensiveGlass ?? 50;
 		const perimeterPressure = dGamePlan?.perimeterPressure ?? 50;
+		const pickCoverage = dGamePlan?.pickCoverage ?? 50;
 
-		// Crashing the offensive glass pulls rebounds away from the defense; crashing the defensive
-		// glass claws them back. High perimeter pressure leaves the defense out of position to box out.
-		const crashFactor = 0.7 + (crashOffensiveGlass / 100) * 0.6;
-		const defensiveGlassFactor = 0.7 + (defensiveGlass / 100) * 0.6;
-		const perimeterPressurePenalty =
-			1 - (Math.max(0, perimeterPressure - 50) / 50) * 0.08;
+		// Base rebound math, with no game plan involved at all.
+		const baseDrbProb =
+			(0.75 * (2 + this.team[this.d].compositeRating.rebounding)) /
+			(g.get("orbFactor") * (2 + this.team[this.o].compositeRating.rebounding));
 
-		if (
-			((0.75 * (2 + this.team[this.d].compositeRating.rebounding)) /
-				(g.get("orbFactor") *
-					(2 + this.team[this.o].compositeRating.rebounding))) *
-				((defensiveGlassFactor * perimeterPressurePenalty) / crashFactor) >
-			Math.random()
-		) {
+		// Crashing the defensive glass claws rebounds back for the defense, gated by whether that
+		// defense can actually rebound; crashing the offensive glass steals them for the offense,
+		// gated the same way. High perimeter pressure costs the (already out-of-position) defense a
+		// small ungated rebounding penalty - subtracted, not added: the plan doc's pseudocode has a
+		// "+" here, but its own comment ("pressing D is out of position") and the prior code's
+		// sub-1 penalty factor both make clear this should reduce the defense's rebound probability.
+		// Bounded additive shift, not a multiplicative ratio - see F3/F-B in
+		// GAME_PLAN_REBALANCE_PLAN.md for why the old factor-ratio version squared the intended
+		// swing into a ~25pp ORB% exploit.
+		// Dropped pick coverage (bigs staying home instead of stepping out to the perimeter) also
+		// means better floor position to box out - small, ungated (F-E).
+		const rebDelta = helpers.bound(
+			GAME_PLAN_TUNING.REBOUND_DEFENSIVE_GLASS_DELTA *
+				intent(defensiveGlass) *
+				eq(this.team[this.d].compositeRating.rebounding) -
+				GAME_PLAN_TUNING.REBOUND_CRASH_DELTA *
+					intent(crashOffensiveGlass) *
+					eq(this.team[this.o].compositeRating.rebounding) -
+				GAME_PLAN_TUNING.REBOUND_PRESSURE_PENALTY *
+					Math.max(0, intent(perimeterPressure)) +
+				GAME_PLAN_TUNING.PICK_COVERAGE_BELOW_REBOUND_BONUS *
+					Math.max(0, -intent(pickCoverage)),
+			-GAME_PLAN_TUNING.REBOUND_DELTA_CLAMP,
+			GAME_PLAN_TUNING.REBOUND_DELTA_CLAMP,
+		);
+
+		if (baseDrbProb + rebDelta > Math.random()) {
 			p = this.pickPlayer("rebounding", this.d, 3);
 			this.recordStat(this.d, p, "drb");
 			this.playByPlay.logEvent({

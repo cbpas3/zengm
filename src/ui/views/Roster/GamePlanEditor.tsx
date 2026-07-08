@@ -34,11 +34,25 @@ const DEFAULT_GAME_PLAN: GamePlan = {
 	defensiveGlass: 50,
 };
 
+// Matches src/worker/core/team/gamePlanExecution.ts
+type GamePlanExecutionLabel = "Poor" | "Average" | "Elite";
+type GamePlanExecution = {
+	rebounding: GamePlanExecutionLabel;
+	defense: GamePlanExecutionLabel;
+	defensePerimeter: GamePlanExecutionLabel;
+	blocking: GamePlanExecutionLabel;
+	pace: GamePlanExecutionLabel;
+};
+
 type SliderConfig = {
 	key: keyof GamePlan;
 	label: string;
 	minLabel: string;
 	maxLabel: string;
+	// Which execution-quality composite this dial's benefit is actually gated by (F-A/F-E in
+	// GAME_PLAN_REBALANCE_PLAN.md) - shown as a small chip so a dial silently executing at the
+	// eq() floor doesn't just feel broken (F-J).
+	executionKey?: keyof GamePlanExecution;
 };
 
 const OFFENSE_SLIDER_CONFIG: SliderConfig[] = [
@@ -77,12 +91,14 @@ const OFFENSE_SLIDER_CONFIG: SliderConfig[] = [
 		label: "Transition",
 		minLabel: "Walk it up",
 		maxLabel: "Push every miss/make",
+		executionKey: "pace",
 	},
 	{
 		key: "crashOffensiveGlass",
 		label: "Crash Offensive Glass",
 		minLabel: "Get back on D",
 		maxLabel: "Send bodies to the boards",
+		executionKey: "rebounding",
 	},
 ];
 
@@ -92,43 +108,67 @@ const DEFENSE_SLIDER_CONFIG: SliderConfig[] = [
 		label: "Pick Coverage",
 		minLabel: "Drop coverage",
 		maxLabel: "Switch everything",
+		executionKey: "defensePerimeter",
 	},
 	{
 		key: "perimeterPressure",
 		label: "Perimeter Pressure",
 		minLabel: "Sag off",
 		maxLabel: "Pressure the ball",
+		executionKey: "defensePerimeter",
 	},
 	{
 		key: "helpAggression",
 		label: "Help Aggression",
 		minLabel: "Stay home on shooters",
 		maxLabel: "Collapse on drives",
+		executionKey: "defense",
 	},
 	{
 		key: "defensiveGlass",
 		label: "Defensive Glass",
 		minLabel: "Leak out for offense",
 		maxLabel: "Crash defensive boards",
+		executionKey: "rebounding",
 	},
 ];
+
+const EXECUTION_BADGE_CLASS: Record<GamePlanExecutionLabel, string> = {
+	Elite: "badge rounded-pill text-bg-success",
+	Average: "badge rounded-pill text-bg-secondary",
+	Poor: "badge rounded-pill text-bg-danger",
+};
 
 const GamePlanSlider = ({
 	config,
 	value,
+	execution,
 	onChange,
 }: {
 	config: SliderConfig;
 	value: number;
+	execution?: GamePlanExecution;
 	onChange: (key: keyof GamePlan, value: number) => void;
 }) => {
 	const id = `game-plan-${config.key}`;
+	const executionLabel = config.executionKey
+		? execution?.[config.executionKey]
+		: undefined;
 
 	return (
 		<div className="mb-3">
 			<label className="form-label mb-0 fw-semibold" htmlFor={id}>
 				{config.label}
 			</label>
+			{executionLabel ? (
+				<span
+					className={`${EXECUTION_BADGE_CLASS[executionLabel]} ms-2`}
+					style={{ fontSize: "0.65rem" }}
+					title="How well your current roster can actually execute this dial"
+				>
+					{executionLabel} execution
+				</span>
+			) : null}
 			<input
 				type="range"
 				className="form-range"
@@ -162,6 +202,7 @@ const GamePlanEditor = ({
 	t: {
 		tid: number;
 		gamePlan?: GamePlan;
+		gamePlanExecution?: GamePlanExecution;
 	};
 }) => {
 	const [expanded, setExpanded] = useState(!window.mobile);
@@ -215,6 +256,7 @@ const GamePlanEditor = ({
 								key={config.key}
 								config={config}
 								value={gamePlan[config.key]}
+								execution={t.gamePlanExecution}
 								onChange={handleChange}
 							/>
 						))}
@@ -229,6 +271,7 @@ const GamePlanEditor = ({
 								key={config.key}
 								config={config}
 								value={gamePlan[config.key]}
+								execution={t.gamePlanExecution}
 								onChange={handleChange}
 							/>
 						))}

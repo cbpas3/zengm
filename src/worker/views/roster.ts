@@ -13,6 +13,7 @@ import addFirstNameShort from "../util/addFirstNameShort.ts";
 import { getActualPlayThroughInjuries } from "../core/game/loadTeams.ts";
 import { bySport, isSport } from "../../common/sportFunctions.ts";
 import { countTopPositionGroups } from "../core/team/positionalDepthTax.ts";
+import { computeGamePlanExecution } from "../core/team/gamePlanExecution.ts";
 
 const sortByPos = (p: {
 	ratings: {
@@ -200,6 +201,25 @@ const updateRoster = async (
 		]; // tid and draft are used for checking if a player can be released without paying his salary
 
 		const ratings = ["ovr", "pot", "dovr", "dpot", "skills", "pos", "ovrs"];
+		// Extra raw ratings needed to recompute the rebounding/defense/defensePerimeter/blocking/
+		// pace composites for the GamePlanEditor execution-quality chips (F-J) - see
+		// gamePlanExecution.ts. Composite ratings themselves (as computed in loadTeams.ts) aren't
+		// available here, since this view doesn't go through processTeam.
+		if (isSport("basketball")) {
+			ratings.push(
+				"hgt",
+				"stre",
+				"spd",
+				"jmp",
+				"diq",
+				"reb",
+				"oiq",
+				"dnk",
+				"tp",
+				"drb",
+				"pss",
+			);
+		}
 		const stats2 = [...stats, "yearsWithTeam", "jerseyNumber", "min", "gp"];
 
 		let players: any[];
@@ -355,6 +375,19 @@ const updateRoster = async (
 				.filter((p) => p.injury.gamesRemaining === 0)
 				.map((p) => p.ratings.pos);
 			(t2 as any).rosterBalance = countTopPositionGroups(healthyPositions);
+		}
+
+		// Game plan execution-quality chips (F-J): "your active roster right now," same scoping
+		// as Roster Balance above - not shown for historical seasons. Not gated on any Challenge
+		// Mode toggle since it's purely informational (why a dial isn't paying off), not a balance
+		// mechanic itself.
+		if (isSport("basketball") && inputs.season === g.get("season")) {
+			const healthyGamePlanPlayers = players
+				.filter((p) => p.injury.gamesRemaining === 0)
+				.slice(0, 8);
+			(t2 as any).gamePlanExecution = computeGamePlanExecution(
+				healthyGamePlanPlayers,
+			);
 		}
 
 		for (const p of players) {

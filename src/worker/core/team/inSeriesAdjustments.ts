@@ -12,6 +12,23 @@ import type { Team } from "../../../common/types.ts";
 
 export type GamePlan = NonNullable<Team["gamePlan"]>;
 
+// Neutral fallback for anywhere a GamePlan is required but none is stored/generated yet (e.g.
+// in-series adjustments running for an AI team that has aiGamePlans off) - every field at 50, the
+// documented no-op value for every slider.
+export const NEUTRAL_GAME_PLAN: GamePlan = {
+	pace: 50,
+	threePointRate: 50,
+	postPlay: 50,
+	rimAttack: 50,
+	ballMovement: 50,
+	transition: 50,
+	crashOffensiveGlass: 50,
+	pickCoverage: 50,
+	perimeterPressure: 50,
+	helpAggression: 50,
+	defensiveGlass: 50,
+};
+
 export type OpponentSeriesShotProfile = {
 	threePointRate: number; // tpa / fga, averaged over the series games played so far
 	threePointAccuracy: number; // tp / tpa

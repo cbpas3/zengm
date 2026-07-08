@@ -84,6 +84,7 @@ const gameAttributesKeysSportSpecific = {
 		"schemeFit",
 		"teamChemistry",
 		"inSeriesAdjustments",
+		"aiGamePlans",
 		"foulRateFactor",
 		"foulsNeededToFoulOut",
 		"foulsUntilBonus",
@@ -386,6 +387,11 @@ const defaultGameAttributes: GameAttributesLeagueWithHistory = {
 	schemeFit: false,
 	teamChemistry: false,
 	inSeriesAdjustments: false,
+	// Fairness fix, not a difficulty option (see F-H in GAME_PLAN_REBALANCE_PLAN.md) - without it,
+	// AI teams stay gamePlan-blind and the possession-economy dials stay exploitable against them
+	// regardless of the other Challenge Mode toggles above. Defaults on; the toggle exists for
+	// A/B comparison and old saves.
+	aiGamePlans: true,
 	saveOldBoxScores: {
 		pastSeasons: 100,
 		pastSeasonsType: "all",

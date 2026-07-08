@@ -166,6 +166,7 @@ export type Key =
 	| "schemeFit"
 	| "teamChemistry"
 	| "inSeriesAdjustments"
+	| "aiGamePlans"
 	| "saveOldBoxScores"
 	| "currencyFormat"
 	| "overtimeLength"

@@ -20,9 +20,11 @@ import {
 import { computeSchemeFit } from "../team/schemeFit.ts";
 import {
 	computeInSeriesAdjustments,
+	NEUTRAL_GAME_PLAN,
 	type GamePlan,
 	type OpponentSeriesShotProfile,
 } from "../team/inSeriesAdjustments.ts";
+import { genAiGamePlan } from "../team/genAiGamePlan.ts";
 
 const MAX_NUM_PLAYERS_PACE = 7;
 
@@ -201,6 +203,7 @@ export const processTeam = async (
 		tid: number;
 		playThroughInjuries: [number, number];
 		depth?: any;
+		strategy?: "contending" | "rebuilding";
 		gamePlan?: {
 			pace: number;
 			threePointRate: number;
@@ -266,20 +269,10 @@ export const processTeam = async (
 
 	const playoffs = g.get("phase") === PHASE.PLAYOFFS;
 
-	// In-series AI adjustments (Phase 5): only for AI teams, mid-playoffs, gated on the toggle.
-	// Overrides the game plan used for this game only - teamInput (the stored team object) is
-	// never mutated, so nothing here gets persisted.
+	// gamePlan is resolved in full further down (AI generation, then in-series adjustments),
+	// once this team's players have been processed and their composite ratings are available -
+	// see the isSport("basketball") block below, right before it's used for the pace modifier.
 	let gamePlan = teamInput.gamePlan;
-	if (
-		isSport("basketball") &&
-		playoffs &&
-		!allStarGame &&
-		gamePlan !== undefined &&
-		g.get("inSeriesAdjustments") &&
-		!g.get("userTids").includes(teamInput.tid)
-	) {
-		gamePlan = await getInSeriesGamePlan(teamInput.tid, gamePlan);
-	}
 
 	const actualPlayThroughInjuries = getActualPlayThroughInjuries(teamInput);
 
@@ -478,6 +471,53 @@ export const processTeam = async (
 	}
 
 	if (isSport("basketball")) {
+		// AI game plans (F-H): every AI team gets a personnel-driven plan of its own if it doesn't
+		// have one stored, instead of staying gamePlan-blind forever (the only write site for
+		// Team.gamePlan is the user's own updateGamePlan endpoint - see F2 in
+		// GAME_PLAN_REBALANCE_PLAN.md). Reads the same healthy-players convention as the depth tax
+		// and scheme fit below.
+		const isAiTeam = !g.get("userTids").includes(teamInput.tid);
+		if (
+			gamePlan === undefined &&
+			isAiTeam &&
+			!allStarGame &&
+			g.get("aiGamePlans")
+		) {
+			const healthyGenAiPlayers: {
+				compositeRating: {
+					shootingThreePointer: number;
+					defensePerimeter: number;
+					rebounding: number;
+					pace: number;
+					usage: number;
+				};
+			}[] = [];
+			for (const p of t.player) {
+				if (p.injury.gamesRemaining === 0 || p.injury.playingThrough) {
+					healthyGenAiPlayers.push({ compositeRating: p.compositeRating });
+				}
+			}
+			gamePlan = genAiGamePlan(
+				healthyGenAiPlayers,
+				teamInput.strategy === "contending" ? "contending" : "rebuilding",
+			);
+		}
+
+		// In-series AI adjustments (Phase 5): only for AI teams, mid-playoffs, gated on the
+		// toggle. Overrides the game plan used for this game only - teamInput (the stored team
+		// object) is never mutated, so nothing here gets persisted. Every AI team now has *some*
+		// plan to adjust (its own stored one, or the one just generated above), so this no longer
+		// needs to guard on gamePlan !== undefined (F-H revives this - it was dead code for AI
+		// teams before, since they never had a stored plan to adjust in the first place).
+		if (playoffs && !allStarGame && isAiTeam && g.get("inSeriesAdjustments")) {
+			gamePlan = await getInSeriesGamePlan(
+				teamInput.tid,
+				gamePlan ?? NEUTRAL_GAME_PLAN,
+			);
+		}
+
+		t.gamePlan = gamePlan;
+
 		t.pace = 0;
 
 		let numPlayers = 0;
