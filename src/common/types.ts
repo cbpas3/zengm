@@ -968,7 +968,7 @@ export type Option = {
 
 export type Options = {
 	fullNames?: boolean;
-	geminiApiKey?: string;
+	openRouterApiKey?: string;
 	phaseChangeRedirects: Phase[];
 	units?: "metric" | "us";
 };

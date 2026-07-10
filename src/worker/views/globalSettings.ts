@@ -29,7 +29,7 @@ const updateOptions = async (inputs: unknown, updateEvents: UpdateEvents) => {
 				realTeamInfo === undefined ? "" : JSON.stringify(realTeamInfo, null, 2),
 			units: options.units,
 			fullNames: !!options.fullNames,
-			geminiApiKey: options.geminiApiKey ?? "",
+			openRouterApiKey: options.openRouterApiKey ?? "",
 			phaseChangeRedirects: options.phaseChangeRedirects,
 		};
 	}

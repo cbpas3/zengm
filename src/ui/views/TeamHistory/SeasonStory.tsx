@@ -54,10 +54,10 @@ const SeasonStory = ({ tid, season }: { tid: number; season: number }) => {
 			{state.requested && state.usedFallback ? (
 				<div className="alert alert-warning mt-2 d-inline-block ms-2">
 					{state.rateLimited ? (
-						"Gemini's rate limit was hit generating this (it takes two calls per story) — wait a minute and try again."
+						"OpenRouter's free-tier rate limit was hit generating this (it takes two calls per story) — wait a minute and try again."
 					) : (
 						<>
-							AI season story unavailable — set a Gemini API key on the{" "}
+							AI season story unavailable — set an OpenRouter API key on the{" "}
 							<a href="/settings">Global Settings</a> page, or try again.
 						</>
 					)}

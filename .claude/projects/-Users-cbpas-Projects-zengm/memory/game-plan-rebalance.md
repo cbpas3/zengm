@@ -1,10 +1,12 @@
 ---
 name: game-plan-rebalance
-description: Game plan sliders (Phases 1-5) are exploitable — rebalance plan lives in GAME_PLAN_REBALANCE_PLAN.md, awaiting implementation
+description: Game plan rebalance is fully implemented (PR-1..PR-5); plan doc and CLAUDE.md Feature 9 are the references
 metadata:
   type: project
 ---
 
-As of 2026-07-08: playtesting showed the Harder-RPD game plan feature is badly exploitable (24 OVR team went 71-11 with all dials maxed; 64 OVR player at 27.8 PER). All Phases 1-5 are implemented (2-5 by the user, not Claude). Root causes: possession-economy sliders read zero player ratings, `doReb` factor-ratio squares the intended swing, costs are token vs benefits, and AI teams never have a gamePlan (only write site is the user API endpoint — which also makes Phase 5 in-series adjustments dead code for AI teams via the `gamePlan !== undefined` guard in loadTeams.ts).
+As of 2026-07-08 the game-plan rebalance is **fully implemented** (all 5 PRs — user confirmed). `GAME_PLAN_REBALANCE_PLAN.md` (repo root) has a status header listing as-built deviations (EQ_PIVOT=0.62 not 0.5, F-A shipped in PR-1, looser measured test bands); CLAUDE.md "Feature 9" is the as-built summary. T-D2 (full-league tuning script) was never built — it's the known follow-up for tightening magnitude bands.
 
-**How to apply:** The full fix spec + test plan is `GAME_PLAN_REBALANCE_PLAN.md` at repo root (PR-1..PR-5 order; core mechanic = Execution Quality gating: benefits scale with team composites, costs don't). Implement from that doc; don't re-derive. Magnitude tests must assert bands, not just direction — direction-only tests are how the rebound bug shipped.
+**Why:** future tuning work should start from the measured numbers in `gamePlan.test.ts` inline comments, not the plan doc's original targets.
+
+**How to apply:** treat CLAUDE.md Feature 9 + `gamePlanTuning.ts` as ground truth over the plan doc. Lesson that carries to all sim features (see [[rfa-plan]]): magnitude tests must assert bands, not direction — direction-only tests are how the original rebound exploit shipped.

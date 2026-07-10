@@ -42,7 +42,7 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 
 		return {
 			fullNames,
-			geminiApiKey: props.geminiApiKey ?? "",
+			openRouterApiKey: props.openRouterApiKey ?? "",
 			phaseChangeRedirects: props.phaseChangeRedirects,
 			realPlayerPhotos: props.realPlayerPhotos,
 			realTeamInfo: props.realTeamInfo,
@@ -80,7 +80,7 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 		try {
 			await toWorker("main", "updateOptions", {
 				fullNames: state.fullNames === "always",
-				geminiApiKey: state.geminiApiKey || undefined,
+				openRouterApiKey: state.openRouterApiKey || undefined,
 				phaseChangeRedirects: state.phaseChangeRedirects,
 				realPlayerPhotos: state.realPlayerPhotos,
 				realTeamInfo: state.realTeamInfo,
@@ -258,36 +258,42 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 						<h2>AI Trade Realism</h2>
 						<div className="row mb-3">
 							<div className="col-sm-6">
-								<label className="form-label" htmlFor="options-gemini-api-key">
-									Gemini API Key{" "}
+								<label
+									className="form-label"
+									htmlFor="options-openrouter-api-key"
+								>
+									OpenRouter API Key{" "}
 									<HelpPopover title="AI Trade Realism">
 										<p>
-											When set, trade proposals are evaluated by Google Gemini
-											Flash before being accepted. Trades that wouldn't happen
-											in real life (wrong player reputation, bad team fit, etc.)
-											are rejected with a reason. Only affects notable trades
-											(players rated 70+ OVR).
+											When set, trade proposals are evaluated by an AI model
+											(via OpenRouter) before being accepted. Trades that
+											wouldn't happen in real life (wrong player reputation, bad
+											team fit, etc.) are rejected with a reason. Only affects
+											notable trades (players rated 70+ OVR).
 										</p>
 										<p>
 											Get a free key at{" "}
 											<a
-												href="https://aistudio.google.com/apikey"
+												href="https://openrouter.ai/settings/keys"
 												rel="noopener noreferrer"
 												target="_blank"
 											>
-												Google AI Studio
+												OpenRouter
 											</a>
-											.
+											. The free tier is limited to 50 requests/day and
+											20/minute — shared across trade evaluation, trade offers,
+											game recaps, and season stories. Adding $10 in credits
+											raises the daily cap to 1,000.
 										</p>
 									</HelpPopover>
 								</label>
 								<input
 									type="password"
-									id="options-gemini-api-key"
+									id="options-openrouter-api-key"
 									className="form-control"
-									placeholder="AIza..."
-									value={state.geminiApiKey}
-									onChange={handleChange("geminiApiKey") as any}
+									placeholder="sk-or-v1-..."
+									value={state.openRouterApiKey}
+									onChange={handleChange("openRouterApiKey") as any}
 								/>
 							</div>
 						</div>

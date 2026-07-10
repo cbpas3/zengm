@@ -9,8 +9,8 @@ This file documents the custom features added on top of the upstream ZenGM baske
 ZenGM is an open-source sports management simulation. This fork adds:
 
 1. **Player Development System** — archetype-based training, breakthrough seasons, regression floors
-2. **Gemini AI Trade Engine** — Gemini Flash powers the trading block, acting as all opposing GMs
-3. **AI Article Generation** — Gemini-written game recaps ("Way 1") and team season retrospectives ("Way 3")
+2. **OpenRouter AI Trade Engine** — a free OpenRouter model powers the trading block, acting as all opposing GMs
+3. **AI Article Generation** — AI-written game recaps ("Way 1") and team season retrospectives ("Way 3")
 4. **Game Plan (Harder RPD Challenge, Phase 1)** — expanded offense/defense sliders (no LLM calls) that make converting foreknowledge into a dynasty require actual roster/scheme decisions, not just stacking stars
 5. **Game Plan Rebalance** — talent-gates every possession-economy dial (F-A's `eq()` execution-quality helper) so cranking a slider without the personnel to back it up is neutral-to-negative EV instead of a free win, fixes the exploit that let a 24 OVR team with every dial maxed go 71-11, and gives AI teams their own personnel-driven game plans
 
@@ -53,72 +53,84 @@ Focus and mentor rating keys are **skipped in the RPD blend loop** (step 2 of `d
 
 ### Key files
 
-| File                                                | Role                                                                                                                 |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `src/common/types.ts`                               | `DevFocusType` union type; `devOverride`, `devFocus`, `mentorPid` on `PlayerWithoutKey`; `geminiApiKey` on `Options` |
-| `src/worker/core/player/developSeason.ts`           | Snapshot → RPD exemption → breakthrough + floor logic                                                                |
-| `src/worker/core/player/develop.ts`                 | Resolves mentor, passes `devOptions` into `developSeason`                                                            |
-| `src/worker/api/index.ts`                           | `updatePlayerDevelopment` API endpoint                                                                               |
-| `src/worker/views/roster.ts`                        | Exposes `devOverride`, `devFocus`, `mentorPid` to UI                                                                 |
-| `src/ui/views/Roster/PlayerDevelopmentControls.tsx` | Dev Override checkbox, Focus select, Mentor select                                                                   |
-| `src/ui/views/Roster/index.tsx`                     | Adds "Dev" column to roster table                                                                                    |
-| `src/common/getCols.ts`                             | Added `Dev` column definition (required to avoid "Unknown column" crash)                                             |
+| File                                                | Role                                                                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `src/common/types.ts`                               | `DevFocusType` union type; `devOverride`, `devFocus`, `mentorPid` on `PlayerWithoutKey`; `openRouterApiKey` on `Options` |
+| `src/worker/core/player/developSeason.ts`           | Snapshot → RPD exemption → breakthrough + floor logic                                                                    |
+| `src/worker/core/player/develop.ts`                 | Resolves mentor, passes `devOptions` into `developSeason`                                                                |
+| `src/worker/api/index.ts`                           | `updatePlayerDevelopment` API endpoint                                                                                   |
+| `src/worker/views/roster.ts`                        | Exposes `devOverride`, `devFocus`, `mentorPid` to UI                                                                     |
+| `src/ui/views/Roster/PlayerDevelopmentControls.tsx` | Dev Override checkbox, Focus select, Mentor select                                                                       |
+| `src/ui/views/Roster/index.tsx`                     | Adds "Dev" column to roster table                                                                                        |
+| `src/common/getCols.ts`                             | Added `Dev` column definition (required to avoid "Unknown column" crash)                                                 |
 
 ---
 
-## Feature 2: Gemini AI Trade Engine
+## Feature 2: OpenRouter AI Trade Engine
 
 ### What it does
 
-Replaces the dumb value-matching trading block with **Google Gemini Flash** acting as all 29 opposing GMs simultaneously. Gemini uses NBA historical knowledge (player reputation, attitude, team culture, roster needs as of the current sim season) to generate realistic trade proposals.
+Replaces the dumb value-matching trading block with an **AI model routed through OpenRouter** acting as all 29 opposing GMs simultaneously. The model uses NBA historical knowledge (player reputation, attitude, team culture, roster needs as of the current sim season) to generate realistic trade proposals.
+
+Switched from Google AI Studio (Gemini) to OpenRouter on 2026-07-10 — same prompts/architecture, different provider — because OpenRouter's single OpenAI-compatible endpoint covers 400+ models (including free ones from multiple labs) behind one key, with a documented `models` fallback array for automatic failover if a specific free model is provider-throttled.
 
 ### Architecture
 
-- **Single API call** covers all 29 teams (respects the 15 RPM free-tier rate limit)
-- **`makeItWork`** is called post-Gemini to balance trade value after Gemini's player selections
+- **Single API call** covers all 29 teams
+- **`makeItWork`** is called post-generation to balance trade value after the model's player selections
 - **Franchise player protection** is enforced at two levels: prompt tag `[FRANCHISE — DO NOT OFFER]` on each team's #1 player, and code exclusion from the `playerNameToPid` lookup map
-- **Fallback**: if Gemini fails or returns nothing, standard offers are generated and a yellow warning banner is shown in the UI
+- **Fallback**: if the model fails or returns nothing, standard offers are generated and a yellow warning banner is shown in the UI
 
 ### AI-to-AI veto
 
-When two AI teams trade, Gemini evaluates whether the deal is realistic before it processes. Triggered only when trade value delta < 15 and at least one player has OVR ≥ 70.
+When two AI teams trade, the model evaluates whether the deal is realistic before it processes. Triggered only when trade value delta < 15 and at least one player has OVR ≥ 70.
 
 ### API key storage
 
-Stored in Global Settings under "AI Trade Realism" (basketball only). Saved to `options.geminiApiKey` in the database.
+Stored in Global Settings under "AI Trade Realism" (basketball only). Saved to `options.openRouterApiKey` in the database. Get a free key at [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys).
 
 ### Model
 
-`gemini-3.5-flash` (Stable/GA, released May 19, 2026 — most intelligent model available on the free tier). Switched from `gemini-3.1-flash-lite` on 2026-07-07 for better trade-realism reasoning; `gemini-3.1-flash-lite` remains the recommended fallback if free-tier daily limits are hit. Note: `gemini-3.1-pro-preview` is NOT free-tier eligible.
+Primary model is **`tencent/hy3:free`** — OpenRouter's #1 free model by usage as of mid-2026, ranking well across general-knowledge categories (Academia, Finance, Marketing) _and_ the Roleplay/Creative-Writing leaderboard, and explicitly built for "grounded, anti-hallucination" answers — the load-bearing property for prompts whose #1 instruction is "roster data is ground truth." Defaults to a no-think mode, so (unlike `gemini-3.5-flash`) there's no thinking-eats-the-token-budget gotcha to work around by default — reasoning is opt-in per call via the `reasoning.effort` param.
 
-**⚠️ Thinking-model gotcha:** unlike Flash-Lite, `gemini-3.5-flash` has thinking ON by default (`medium`), and thinking tokens are drawn from `maxOutputTokens`. A small cap (the old 80/1200 values) is entirely consumed by thinking → `finishReason: MAX_TOKENS` → empty `text` → silent fallback. Both calls therefore set `generationConfig.thinkingConfig.thinkingLevel: "low"` and raise `maxOutputTokens` (veto 2048, offers 8192). REST shape: `generationConfig: { thinkingConfig: { thinkingLevel: "low" } }` (values: `minimal | low | medium | high`).
+Two free fallbacks from different labs — `openai/gpt-oss-120b:free` and `google/gemma-4-31b-it:free` — are passed in OpenRouter's `models` array, tried in order **within the same request** if the primary model's provider is down or rate-limited. This doesn't cost extra against the daily quota (OpenRouter bills/counts whichever model actually answered) and specifically mitigates "free-tier usage of popular models can be rate-limited by the provider during peak times," which the pricing FAQ calls out as expected behavior for exactly this kind of high-traffic free model.
+
+**⚠️ Free-tier quota gotcha (the OpenRouter equivalent of the old thinking-model gotcha):** the free tier is **50 requests/day and 20 requests/minute, shared across the whole account** — not per-model, not per-feature. Every AI feature in this fork (trade veto, trade offers, game recap, season story) draws from the same 50/day budget. Two consequences baked into the code:
+
+1. `callOpenRouterWithRetry` (season story's two passes) does **not** retry when the first failure was a 429 — retrying a rate-limited call within the same request immediately re-fails and burns a second unit of a already-scarce daily quota for a guaranteed duplicate. It still retries once on a non-429 failure (timeout/network/cold-start).
+2. Trade veto, trade offers, and game recap all surface a distinct "OpenRouter's free-tier rate limit was hit" banner (via the same `onError`/429-detection plumbing) instead of the generic "AI unavailable" message, so a user who's burned through the day's quota gets an accurate reason rather than a "did I forget to set my key?" prompt.
+
+A $10 lifetime credit top-up (not a subscription) raises the cap to 1,000 requests/day — mentioned in the Global Settings help text as the fix if the 50/day cap becomes a real constraint.
 
 **API endpoint:**
 
 ```
-https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=<KEY>
+POST https://openrouter.ai/api/v1/chat/completions
+Authorization: Bearer <KEY>
 ```
+
+Standard OpenAI-compatible chat completions shape (`messages`, `temperature`, `max_tokens`), plus OpenRouter's `models` array (fallback chain) and `reasoning: { effort }` (maps 1:1 onto the old `thinkingLevel` values: `minimal | low | medium | high`).
 
 ### Key files
 
-| File                                      | Role                                                                                                                                        |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/worker/util/gemini.ts`               | `evaluateTrade` (AI veto), `generateTradingBlockOffers` (offer generation), `callGemini` (shared fetch wrapper)                             |
-| `src/worker/api/index.ts`                 | `getTradingBlockOffers` — tries Gemini first, falls back to standard; `augmentOffers` adds `reasoning` field; `updateOptions` saves API key |
-| `src/worker/core/trade/betweenAiTeams.ts` | Calls `evaluateTrade` veto before processing AI-to-AI trades                                                                                |
-| `src/ui/views/TradingBlock/index.tsx`     | Unpacks `{ offers, usedFallback }`, shows fallback banner, renders GM reasoning                                                             |
-| `src/ui/views/GlobalSettings/index.tsx`   | Password input for Gemini API key                                                                                                           |
-| `src/worker/views/globalSettings.ts`      | Returns `geminiApiKey` to UI                                                                                                                |
+| File                                      | Role                                                                                                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/worker/util/openrouter.ts`           | `evaluateTrade` (AI veto), `generateTradingBlockOffers` (offer generation), `callOpenRouter` (shared fetch wrapper), `callOpenRouterWithRetry`    |
+| `src/worker/api/index.ts`                 | `getTradingBlockOffers` — tries the AI model first, falls back to standard; `augmentOffers` adds `reasoning` field; `updateOptions` saves API key |
+| `src/worker/core/trade/betweenAiTeams.ts` | Calls `evaluateTrade` veto before processing AI-to-AI trades                                                                                      |
+| `src/ui/views/TradingBlock/index.tsx`     | Unpacks `{ offers, usedFallback, rateLimited }`, shows fallback/rate-limit banner, renders GM reasoning                                           |
+| `src/ui/views/GlobalSettings/index.tsx`   | Password input for OpenRouter API key                                                                                                             |
+| `src/worker/views/globalSettings.ts`      | Returns `openRouterApiKey` to UI                                                                                                                  |
 
 ### Return shape from `getTradingBlockOffers`
 
 ```typescript
-{ offers: TradeTeams[], usedFallback: boolean }
+{ offers: TradeTeams[], usedFallback: boolean, rateLimited: boolean }
 ```
 
 ### Prompt instructions (critical constraints)
 
-1. ROSTER DATA IS GROUND TRUTH — Gemini must not assume trades or departures not in the data
+1. ROSTER DATA IS GROUND TRUTH — the model must not assume trades or departures not in the data
 2. NEVER offer a `[FRANCHISE — DO NOT OFFER]` player
 3. NEVER offer a player cited as the pairing reason (e.g. "to pair with X" → X cannot be in the offer)
 4. Only name players from that team's exact roster
@@ -126,7 +138,7 @@ https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generat
 
 ### iOS Safari fix
 
-`AbortSignal.timeout()` is not reliably supported on iOS Safari. Both fetch calls in `gemini.ts` use the compatible pattern instead:
+`AbortSignal.timeout()` is not reliably supported on iOS Safari. The fetch call in `openrouter.ts` uses the compatible pattern instead:
 
 ```typescript
 const controller = new AbortController();
@@ -142,11 +154,11 @@ try {
 
 ## Feature 3: AI Article Generation
 
-Two on-demand, ephemeral (render-don't-persist, nothing saved to the DB) long-form writing features. Both are built on the shared `callGemini` wrapper from Feature 2 and the same UI pattern: an `ActionButton` ("Generate ...") + a yellow fallback banner if Gemini is unavailable + a plain paragraph renderer.
+Two on-demand, ephemeral (render-don't-persist, nothing saved to the DB) long-form writing features. Both are built on the shared `callOpenRouter` wrapper from Feature 2 and the same UI pattern: an `ActionButton` ("Generate ...") + a yellow fallback banner if the AI model is unavailable (rate-limit-aware, see Feature 2) + a plain paragraph renderer.
 
 ### 3a. Game Recap ("Way 1")
 
-One Gemini call per game. Writes a 3–5 paragraph recap from a single game's box score.
+One model call per game. Writes a 3–5 paragraph recap from a single game's box score.
 
 - Worker: `generateGameArticle({ gid })` in `src/worker/api/index.ts`. Reuses `boxScore` from `src/worker/views/gameLog.ts` (exported specifically for this) as its data source — no separate DB queries.
 - UI: `GameRecap` component in `src/ui/views/GameLog.tsx`, "Generate recap" button under the box score.
@@ -154,7 +166,7 @@ One Gemini call per game. Writes a 3–5 paragraph recap from a single game's bo
 
 ### 3b. Season Retrospective ("Way 3")
 
-One team's one season, told as a story — identity, turning point, how it ended — via **two sequential Gemini calls** instead of one. A season is dozens of games; getting a coherent arc (not a bulleted summary) out of it needs (1) aggregating to the right granularity in code and (2) planning the story before writing it.
+One team's one season, told as a story — identity, turning point, how it ended — via **two sequential model calls** instead of one. A season is dozens of games; getting a coherent arc (not a bulleted summary) out of it needs (1) aggregating to the right granularity in code and (2) planning the story before writing it.
 
 **Aggregation** — `buildSeasonGroundTruth(tid, season)` in `src/worker/util/seasonGroundTruth.ts` builds a compact ground-truth object from **season-level data**, which is always present regardless of box-score retention:
 
@@ -167,27 +179,27 @@ One team's one season, told as a story — identity, turning point, how it ended
 
 **Mid-season awareness** — the button works on the in-progress season too (not just completed ones), and the ground truth explicitly flags this via `seasonProgress: { isComplete, gamesPlayed, numGamesRegularSeason, description }` computed from `g.get("season")`/`g.get("phase")` vs. the requested season (`phase >= PHASE.DRAFT_LOTTERY` = that season is fully done, including any playoffs). When `isComplete` is `false`:
 
-- `howSeasonEnded`/seed/"final record" framing is swapped for "current record" + an explicit `Season status: IN PROGRESS — …` line, so Gemini isn't handed a `showMissedPlayoffs`-flavored fact for a team that's simply 40 games from finding out
+- `howSeasonEnded`/seed/"final record" framing is swapped for "current record" + an explicit `Season status: IN PROGRESS — …` line, so the model isn't handed a `showMissedPlayoffs`-flavored fact for a team that's simply 40 games from finding out
 - Both prompts drop the "climax → resolution" framing for "where things stand right now," and the prose pass is told to close with 2–3 forward-looking sentences (trending strengths/weaknesses, hot/cold streaks) instead of a wrap-up
 - The prose pass is also nudged to weave in a `devNotes` entry when present (breakthrough jumps, mentorship) — this is the "highlight player growth" angle for a season that hasn't produced a real ending yet
 
-**Two-pass generation** — `generateSeasonStoryArticle(tid, season)` in `gemini.ts`:
+**Two-pass generation** — `generateSeasonStoryArticle(tid, season)` in `openrouter.ts`:
 
 1. **Outline pass** — ground truth → JSON `{ title, angle, beats: [{ when, what, why_it_mattered }] }` (4–6 beats, 3–5 if in progress), `thinkingLevel: "low"`
 2. **Prose pass** — ground truth + the approved outline → 600–900 word retrospective, `thinkingLevel: "medium"` for coherence over the longer arc
 
-`callGemini` was extended to accept `thinkingLevel`, `maxOutputTokens`, and `timeoutMs` in its options (previously hardcoded to `"low"` / `8192` / `20000`).
+`callOpenRouter` accepts `thinkingLevel`, `maxOutputTokens`, and `timeoutMs` in its options (default `"low"` / `8192` / `20000`).
 
-**Timeout/retry:** this feature's two prompts (full ground-truth block + a long-form prose ask) run close enough to the default 20s abort that a single slow/cold-start response would trip the fallback banner and force the user to click twice. Both passes now use `timeoutMs: 30000` and go through `callGeminiWithRetry` (one silent retry on a `null` result) instead of a bare `callGemini` call — scoped to this feature only, not the shared `callGemini` default, since a trade veto/offer call is small enough that 20s was never the bottleneck there. Note this doubles worst-case Gemini calls per click (up to 4 instead of 2) — worth revisiting if free-tier quota cost becomes a concern.
+**Timeout/retry:** this feature's two prompts (full ground-truth block + a long-form prose ask) run close enough to the default 20s abort that a single slow/cold-start response would trip the fallback banner and force the user to click twice. Both passes use `timeoutMs: 30000` and go through `callOpenRouterWithRetry` instead of a bare `callOpenRouter` call — scoped to this feature only, not the shared `callOpenRouter` default, since a trade veto/offer call is small enough that 20s was never the bottleneck there. The retry is skipped on a 429 (see Feature 2's quota gotcha) but still fires once on any other failure, so worst case this feature spends 2 of the day's 50 requests, not 4.
 
-**Error differentiation (rate limit vs. everything else):** `callGemini` takes an optional `onError?: (info: { status?: number; body?: string }) => void` so a caller can inspect _why_ a call failed without changing its `string | null` return contract for other callers (trade veto/offers/game recap are unaffected). `callGeminiWithRetry` uses this to detect HTTP 429 (free-tier rate limit) specifically; `generateSeasonStoryArticle` now returns `{ article, errorReason?: "rate_limited" | "other" }` instead of a bare string, threaded through `generateSeasonStory`'s `rateLimited` field to `SeasonStory.tsx`, which shows a distinct "rate limit hit, wait a minute" message instead of the generic "check your API key" banner when that's the actual cause.
+**Error differentiation (rate limit vs. everything else):** `callOpenRouter` takes an optional `onError?: (info: { status?: number; body?: string }) => void` so a caller can inspect _why_ a call failed without changing its `string | null` return contract for other callers. `callOpenRouterWithRetry` uses this to detect HTTP 429 (free-tier rate limit) specifically; `generateSeasonStoryArticle` returns `{ article, errorReason?: "rate_limited" | "other" }` instead of a bare string, threaded through `generateSeasonStory`'s `rateLimited` field to `SeasonStory.tsx`, which shows a distinct "rate limit hit, wait a minute" message instead of the generic "check your API key" banner when that's the actual cause. `generateGameArticle` and `getTradingBlockOffers` now use the same `onError` plumbing to expose `rateLimited` too (see Feature 2).
 
 ### Key files (3b)
 
 | File                                       | Role                                                                                |
 | ------------------------------------------ | ----------------------------------------------------------------------------------- |
 | `src/worker/util/seasonGroundTruth.ts`     | `buildSeasonGroundTruth`, `formatGroundTruthText` — all the DB aggregation          |
-| `src/worker/util/gemini.ts`                | `generateSeasonStoryArticle` — the two Gemini passes                                |
+| `src/worker/util/openrouter.ts`            | `generateSeasonStoryArticle` — the two model passes                                 |
 | `src/worker/api/index.ts`                  | `generateSeasonStory({ tid, season })` endpoint, modeled on `getTradingBlockOffers` |
 | `src/ui/views/TeamHistory/SeasonStory.tsx` | Button + loading state + fallback banner, one instance per season row               |
 | `src/ui/views/TeamHistory/Seasons.tsx`     | Renders `SeasonStory` under each season the team actually played games in           |
@@ -209,7 +221,7 @@ Ephemeral only — a saved archive needs a new league-DB object store + schema m
 ### What it does
 
 Part of a multi-phase plan (see `CHALLENGE_FEATURES_PLAN.md`) to make an RPD-100 / `rpdPot=false`
-save harder **without any Gemini/LLM calls**. The player still knows who becomes good; the
+save harder **without any LLM calls**. The player still knows who becomes good; the
 difficulty comes from making it hard to _convert_ that foreknowledge into an unstoppable dynasty.
 Phase 1 expands the per-team `gamePlan` sliders from 5 (offense-only) to 11 (offense + a brand-new
 defense half), all still 0–100 with 50 = neutral/no-op. Applies to every team (user and AI alike) —
@@ -810,5 +822,5 @@ that script exists.
 - **Rating keys**: `tp` = three-point shooting, `fg` = mid-range, `ft` = free throw, `ins` = inside scoring, `dnk` = dunking, `diq` = defensive IQ, `oiq` = offensive IQ, `pss` = passing, `drb` = dribbling, `reb` = rebounding, `stre` = strength, `spd` = speed, `jmp` = jumping, `endu` = endurance
 - **RPD (Real Player Determinism)**: when set to 100%, all player development follows historical NBA data. Dev Override exempts a player from this.
 - **`developSeason.ts` vs `developSeason.basketball.ts`**: the `.ts` wrapper handles RPD, override, floor, breakthrough. The `.basketball.ts` handles base rating math per key.
-- **SharedWorker**: the game runs its simulation in a web worker. All DB access (`idb.cache.*`, `idb.getCopies.*`) happens in worker context. Gemini API calls are made from the worker, not the UI thread.
+- **SharedWorker**: the game runs its simulation in a web worker. All DB access (`idb.cache.*`, `idb.getCopies.*`) happens in worker context. OpenRouter API calls are made from the worker, not the UI thread.
 - **`makeItWork`**: core trade utility that adds/removes assets to balance trade value. Called with `holdUserConstant: true` so the user's offered players stay fixed.

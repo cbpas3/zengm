@@ -1,3 +1,4 @@
 # Memory Index
 
-- [Game plan rebalance pending](game-plan-rebalance.md) — sliders exploitable (24 OVR team went 71-11); fix spec in GAME_PLAN_REBALANCE_PLAN.md at repo root
+- [Game plan rebalance — implemented](game-plan-rebalance.md) — all 5 PRs landed; CLAUDE.md Feature 9 + gamePlanTuning.ts are ground truth; T-D2 tuning script still unbuilt
+- [RFA plan — awaiting implementation](rfa-plan.md) — spec in RESTRICTED_FREE_AGENCY_PLAN.md; Tier 0 = flip existing `rookiesCanRefuse` setting

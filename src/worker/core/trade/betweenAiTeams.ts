@@ -2,7 +2,7 @@ import { team } from "../index.ts";
 import { idb } from "../../db/index.ts";
 import { g, random, local } from "../../util/index.ts";
 import isUntradable from "./isUntradable.ts";
-import evaluateTrade from "../../util/gemini.ts";
+import evaluateTrade from "../../util/openrouter.ts";
 import makeItWork from "./makeItWork.ts";
 import processTrade from "./processTrade.ts";
 import summary from "./summary.ts";
@@ -135,12 +135,12 @@ const attempt = async (valueChangeKey: number) => {
 		return false;
 	}
 
-	// Gemini realism check — veto trades that wouldn't happen in real life
-	const geminiResult = await evaluateTrade([
+	// AI realism check (OpenRouter) — veto trades that wouldn't happen in real life
+	const aiVetoResult = await evaluateTrade([
 		{ tid: teams[0].tid, pids: teams[0].pids, dpids: teams[0].dpids },
 		{ tid: teams[1].tid, pids: teams[1].pids, dpids: teams[1].dpids },
 	]);
-	if (geminiResult && !geminiResult.accepted) {
+	if (aiVetoResult && !aiVetoResult.accepted) {
 		return false;
 	}
 

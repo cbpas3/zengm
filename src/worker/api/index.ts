@@ -165,9 +165,9 @@ import { gameAttributesArrayToObject } from "../../common/gameAttributesArrayToO
 import { bySport, isSport } from "../../common/sportFunctions.ts";
 import {
 	generateTradingBlockOffers,
-	callGemini,
+	callOpenRouter,
 	generateSeasonStoryArticle,
-} from "../util/gemini.ts";
+} from "../util/openrouter.ts";
 import getGlobalSettings from "../util/getGlobalSettings.ts";
 import { boxScore as getGameBoxScore } from "../views/gameLog.ts";
 import { DEV_FOCUS_RATINGS } from "../core/player/developSeason.ts";
@@ -2273,16 +2273,19 @@ const getTradingBlockOffers = async ({
 	dpids: number[];
 	lookingFor: LookingForState;
 }) => {
-	// Try Gemini-powered offer generation first
-	const geminiOffers = await generateTradingBlockOffers(pids, dpids);
+	// Try OpenRouter-powered offer generation first
+	const { offers: aiOffers, rateLimited } = await generateTradingBlockOffers(
+		pids,
+		dpids,
+	);
 
 	let offers: TradeTeams[];
 	let reasonings: Map<number, string> | undefined;
 	let usedFallback = false;
 
-	if (geminiOffers && geminiOffers.length > 0) {
-		offers = geminiOffers.map((o) => o.teams);
-		reasonings = new Map(geminiOffers.map((o, i) => [i, o.reasoning]));
+	if (aiOffers && aiOffers.length > 0) {
+		offers = aiOffers.map((o) => o.teams);
+		reasonings = new Map(aiOffers.map((o, i) => [i, o.reasoning]));
 	} else {
 		usedFallback = true;
 		// Fallback to existing value-matching logic
@@ -2327,25 +2330,29 @@ const getTradingBlockOffers = async ({
 	await idb.cache.savedTradingBlock.put(savedTradingBlock);
 
 	const augmented = await augmentOffers(offers, reasonings);
-	return { offers: augmented, usedFallback };
+	return {
+		offers: augmented,
+		usedFallback,
+		rateLimited: usedFallback && rateLimited,
+	};
 };
 
 const generateGameArticle = async ({ gid }: { gid: number }) => {
 	const settings = await getGlobalSettings();
-	const apiKey = settings.geminiApiKey;
+	const apiKey = settings.openRouterApiKey;
 	if (!apiKey) {
-		return { article: null, usedFallback: true };
+		return { article: null, usedFallback: true, rateLimited: false };
 	}
 
 	const game = await getGameBoxScore(gid);
 	if (!("teams" in game)) {
-		return { article: null, usedFallback: true };
+		return { article: null, usedFallback: true, rateLimited: false };
 	}
 
 	const winnerTeam = (game.teams as any[]).find((t) => t.tid === game.won.tid);
 	const loserTeam = (game.teams as any[]).find((t) => t.tid === game.lost.tid);
 	if (!winnerTeam || !loserTeam) {
-		return { article: null, usedFallback: true };
+		return { article: null, usedFallback: true, rateLimited: false };
 	}
 
 	const statLine = (p: any) =>
@@ -2388,9 +2395,17 @@ Instructions:
 
 Write the recap now.`;
 
-	const raw = await callGemini(apiKey, prompt, { temperature: 0.7 });
+	let rateLimited = false;
+	const raw = await callOpenRouter(apiKey, prompt, {
+		temperature: 0.7,
+		onError: (info) => {
+			if (info.status === 429) {
+				rateLimited = true;
+			}
+		},
+	});
 	if (!raw) {
-		return { article: null, usedFallback: true };
+		return { article: null, usedFallback: true, rateLimited };
 	}
 
 	const article = raw
@@ -2398,7 +2413,7 @@ Write the recap now.`;
 		.replace(/\s*```$/, "")
 		.trim();
 
-	return { article, usedFallback: false };
+	return { article, usedFallback: false, rateLimited: false };
 };
 
 const generateSeasonStory = async ({
@@ -4196,7 +4211,7 @@ const updateOptions = async (
 		{
 			units: options.units,
 			fullNames: options.fullNames,
-			geminiApiKey: options.geminiApiKey || undefined,
+			openRouterApiKey: options.openRouterApiKey || undefined,
 			phaseChangeRedirects: options.phaseChangeRedirects,
 		},
 		"options",

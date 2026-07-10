@@ -526,6 +526,7 @@ const TradingBlock = ({
 		offers: OfferType[];
 		noOffers: boolean;
 		usedFallback: boolean;
+		rateLimited: boolean;
 		pids: number[];
 		dpids: number[];
 	}>(() => {
@@ -552,6 +553,7 @@ const TradingBlock = ({
 			offers: savedTradingBlock?.offers ?? [],
 			noOffers: false, // Only set true in response to a click
 			usedFallback: false,
+			rateLimited: false,
 			pids,
 			dpids,
 		};
@@ -598,6 +600,7 @@ const TradingBlock = ({
 			noOffers: result.offers.length === 0,
 			offers: result.offers,
 			usedFallback: result.usedFallback,
+			rateLimited: result.rateLimited,
 		}));
 	};
 
@@ -838,7 +841,9 @@ const TradingBlock = ({
 
 			{state.usedFallback && state.offers.length > 0 ? (
 				<div className="alert alert-warning mb-0 mt-3 d-inline-block">
-					AI unavailable — showing standard offers.
+					{state.rateLimited
+						? "OpenRouter's free-tier rate limit was hit — showing standard offers."
+						: "AI unavailable — showing standard offers."}
 				</div>
 			) : null}
 

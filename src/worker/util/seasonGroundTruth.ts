@@ -104,7 +104,7 @@ export const buildSeasonGroundTruth = async (
 
 	// A season isn't "over" just because it's the one currently loaded -- the
 	// user can ask for a story mid-regular-season or mid-playoffs. Detect that
-	// so the prompt doesn't tell Gemini to write a resolved ending (e.g.
+	// so the prompt doesn't tell the model to write a resolved ending (e.g.
 	// "missed playoffs") for a team that's still 40 games from finding out.
 	const currentSeason = g.get("season");
 	const currentPhase = g.get("phase");

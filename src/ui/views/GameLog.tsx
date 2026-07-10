@@ -166,11 +166,13 @@ const GameRecap = ({ gid }: { gid: number }) => {
 		generating: boolean;
 		article: string | null;
 		usedFallback: boolean;
+		rateLimited: boolean;
 	}>({
 		requested: false,
 		generating: false,
 		article: null,
 		usedFallback: false,
+		rateLimited: false,
 	});
 
 	const handleClick = async () => {
@@ -183,6 +185,7 @@ const GameRecap = ({ gid }: { gid: number }) => {
 			generating: false,
 			article: result.article,
 			usedFallback: result.usedFallback,
+			rateLimited: result.rateLimited,
 		});
 	};
 
@@ -205,8 +208,14 @@ const GameRecap = ({ gid }: { gid: number }) => {
 
 			{state.requested && state.usedFallback ? (
 				<div className="alert alert-warning mt-2 d-inline-block ms-2">
-					AI recap unavailable — set a Gemini API key on the{" "}
-					<a href="/settings">Global Settings</a> page, or try again.
+					{state.rateLimited ? (
+						"OpenRouter's free-tier rate limit was hit — wait a minute and try again."
+					) : (
+						<>
+							AI recap unavailable — set an OpenRouter API key on the{" "}
+							<a href="/settings">Global Settings</a> page, or try again.
+						</>
+					)}
 				</div>
 			) : null}
 
