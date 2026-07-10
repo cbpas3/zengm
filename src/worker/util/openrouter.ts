@@ -109,7 +109,6 @@ Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words expl
 
 	const text = await callOpenRouter(apiKey, prompt, {
 		temperature: 0.2,
-		thinkingLevel: "low",
 		maxOutputTokens: 2048,
 		timeoutMs: 10000,
 	});
@@ -140,7 +139,7 @@ export const callOpenRouter = async (
 	prompt: string,
 	options?: {
 		temperature?: number;
-		thinkingLevel?: "minimal" | "low" | "medium" | "high";
+		thinkingLevel?: "none" | "minimal" | "low" | "medium" | "high";
 		maxOutputTokens?: number;
 		timeoutMs?: number;
 		onError?: (info: { status?: number; body?: string }) => void;
@@ -167,10 +166,16 @@ export const callOpenRouter = async (
 				temperature: options?.temperature ?? 0.4,
 				max_tokens: options?.maxOutputTokens ?? 8192,
 				reasoning: {
-					// Reasoning tokens are billed/capped as part of max_tokens (same
-					// gotcha as the old Gemini thinking models), so keep effort low by
-					// default and let callers opt into "medium" for longer prose.
-					effort: options?.thinkingLevel ?? "low",
+					// Measured against the real trading-block prompt (~29 teams'
+					// rosters): forcing even "low" effort reasoning on by default
+					// made Hy3 blow through a 30s timeout, because "low" still spends
+					// ~20% of max_tokens on chain-of-thought before the actual answer.
+					// Unlike gemini-3.5-flash (medium reasoning by default, the old
+					// gotcha this pattern was copied from), Hy3's own default is
+					// no-think — fastest — so default to "none" explicitly and only
+					// opt into real reasoning (season story's prose pass) where the
+					// task actually benefits from it.
+					effort: options?.thinkingLevel ?? "none",
 				},
 			}),
 			signal: controller.signal,
@@ -324,6 +329,13 @@ Respond ONLY with valid JSON, no markdown fences:
 
 	let rateLimited = false;
 	const raw = await callOpenRouter(apiKey, prompt, {
+		// This prompt embeds every non-user team's roster (~29 teams), much larger
+		// than the trade-veto or game-recap prompts. The default 20s timeout was
+		// measured to reliably clip Hy3's response to it (Hy3 is a large 295B MoE
+		// model — slower to generate a full multi-team JSON response with
+		// reasoning than Gemini Flash was), silently falling back to non-AI
+		// offers every time. Match season story's 30s budget for the same reason.
+		timeoutMs: 30000,
 		onError: (info) => {
 			if (info.status === 429) rateLimited = true;
 		},
