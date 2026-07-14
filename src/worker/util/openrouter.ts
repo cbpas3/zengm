@@ -573,7 +573,6 @@ Write the retrospective now.`;
 
 	const proseResult = await callOpenRouterWithRetry(apiKey, prosePrompt, {
 		temperature: 0.7,
-		thinkingLevel: "medium",
 		maxOutputTokens: 8192,
 		timeoutMs: 30000,
 	});
