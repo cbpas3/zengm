@@ -48,7 +48,9 @@ const evaluateTrade = async (
 ): Promise<EvalResult | null> => {
 	const settings = await getGlobalSettings();
 	const apiKey = settings.openRouterApiKey;
-	if (!apiKey) return null;
+	if (!apiKey) {
+		return null;
+	}
 
 	const season = g.get("season");
 
@@ -84,7 +86,9 @@ const evaluateTrade = async (
 		...sides.flatMap((s) => s.giving.map((p) => p.ovr)),
 		0,
 	);
-	if (maxOvr < 70) return { accepted: true, reason: "" };
+	if (maxOvr < 70) {
+		return { accepted: true, reason: "" };
+	}
 
 	const formatAssets = (side: (typeof sides)[number]) => {
 		const playersStr = side.giving
@@ -112,7 +116,9 @@ Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words expl
 		maxOutputTokens: 2048,
 		timeoutMs: 10000,
 	});
-	if (!text) return null;
+	if (!text) {
+		return null;
+	}
 
 	const accepted = text.trimStart().toUpperCase().startsWith("ACCEPT");
 	const colonIdx = text.indexOf(":");
@@ -121,17 +127,99 @@ Reply with ACCEPT or REJECT, then a colon, then one sentence under 20 words expl
 	return { accepted, reason };
 };
 
-// --- Trading block offer generation ---
+// --- Trading block offer generation (multi-step) ---
+//
+// This used to be a single mega-prompt: one call asked a free model to pick
+// 3-5 suitor teams across all ~29 rosters AND write the "why" reasoning AND
+// select which specific players to offer, all in one generation. In
+// practice this produced consistent self-contradictions -- the model would
+// write reasoning like "they'd want this to pair with their star X" and
+// then include X in the actual offer, because nothing forced it to track
+// that constraint across a long, repetitive multi-team JSON blob. Free-tier
+// models are not reliable at self-consistency over that much simultaneous
+// output.
+//
+// Fixed by decomposing into narrower back-and-forth exchanges, each asking
+// for the simplest possible field, with the "don't offer the player your
+// own reasoning was just about" constraint enforced in CODE (removing that
+// player from the option list before the next call even sees it) instead
+// of by instruction -- a dumb model can't violate a constraint about an
+// option it was never shown:
+//
+//   1. Shortlist -- across all teams at once, pick suitors + a one-line
+//      reason + (optionally) name the ONE player on that roster who is the
+//      actual subject of the reasoning and must not be offered.
+//   2. (code, no LLM call) Resolve that protected player to a pid and drop
+//      them from the team's tradable list.
+//   3. Per shortlisted team, one call scoped to ONLY that team's
+//      already-filtered roster: "pick 1-3 of these to offer." No
+//      reasoning, no other teams, nothing left to be inconsistent with.
+//
+// The final "reasoning" text shown in the UI is step 1's needSummary,
+// written before the model knew which players would end up in the offer --
+// it can't contradict a pick it never saw.
+//
+// Cost: up to 1 + MAX_SHORTLIST_TEAMS calls per click against the shared
+// 50/day free-tier quota (see the module-level comment above), vs. 1 call
+// before. MAX_SHORTLIST_TEAMS is 3 (not the old 3-5) specifically to bound
+// that -- each call is also much smaller/simpler than the old mega-prompt,
+// so the added round trips are partly offset by shorter per-call timeouts.
+const MAX_SHORTLIST_TEAMS = 3;
 
-type OpenRouterOfferRaw = {
+type TradableRosterPlayer = {
+	pid: number;
+	name: string;
+	pos: string;
+	age: number;
+	ovr: number;
+	yrs: number;
+};
+
+type TeamRosterInfo = {
 	tid: number;
+	teamName: string;
+	record: string;
+	franchisePlayer: TradableRosterPlayer;
+	tradablePlayers: TradableRosterPlayer[];
+};
+
+type ShortlistEntryRaw = {
+	tid: number;
+	needSummary: string;
+	protectPlayer: string;
+};
+
+type ShortlistRaw = {
+	teams: ShortlistEntryRaw[];
+};
+
+type OfferSelectionRaw = {
 	players: string[];
-	reasoning: string;
 };
 
 export type TradingBlockOffer = {
 	teams: TradeTeams;
 	reasoning: string;
+};
+
+const extractJsonObject = <T>(raw: string): T | null => {
+	const cleaned = raw
+		.replace(/^```(?:json)?\s*/i, "")
+		.replace(/\s*```$/i, "")
+		.trim();
+	try {
+		return JSON.parse(cleaned) as T;
+	} catch {
+		const match = cleaned.match(/{[\S\s]*}/);
+		if (!match) {
+			return null;
+		}
+		try {
+			return JSON.parse(match[0]) as T;
+		} catch {
+			return null;
+		}
+	}
 };
 
 export const callOpenRouter = async (
@@ -203,9 +291,9 @@ export const callOpenRouter = async (
 			data?.model,
 		);
 		return text;
-	} catch (err) {
-		console.log("[OpenRouter] callOpenRouter: caught error", String(err));
-		options?.onError?.({ body: String(err) });
+	} catch (error) {
+		console.log("[OpenRouter] callOpenRouter: caught error", String(error));
+		options?.onError?.({ body: String(error) });
 		return null;
 	} finally {
 		clearTimeout(timer);
@@ -222,7 +310,9 @@ export const generateTradingBlockOffers = async (
 		"[OpenRouter] generateTradingBlockOffers: apiKey present?",
 		!!apiKey,
 	);
-	if (!apiKey) return { offers: null, rateLimited: false };
+	if (!apiKey) {
+		return { offers: null, rateLimited: false };
+	}
 
 	const season = g.get("season");
 	const userTid = g.get("userTid");
@@ -261,123 +351,232 @@ export const generateTradingBlockOffers = async (
 		recordByTid[t.tid] = `${t.seasonAttrs.won}-${t.seasonAttrs.lost}`;
 	}
 
-	// Build condensed team data for prompt
-	const teamEntries: string[] = [];
-	const playerNameToPid: Map<string, number> = new Map();
+	// Build per-team roster info once, reused by both steps below. The
+	// franchise player is tracked separately from tradablePlayers so it's
+	// structurally never offerable -- not because a prompt says not to.
+	const teamRosterInfos: TeamRosterInfo[] = [];
 
 	for (const t of allTeams) {
 		const players = (
 			await idb.cache.players.indexGetAll("playersByTid", t.tid)
 		).filter((p) => !isUntradable(p).untradable);
 
-		// Sort by ovr descending, take top 9
-		const topPlayers = players
+		const sorted = players
 			.slice()
 			.sort(
 				(a, b) => (b.ratings.at(-1)?.ovr ?? 0) - (a.ratings.at(-1)?.ovr ?? 0),
 			)
 			.slice(0, 9);
 
-		// Only register non-franchise players as offerable (skip the #1 player)
-		for (const p of topPlayers.slice(1)) {
-			const key = `${p.firstName} ${p.lastName}`.toLowerCase();
-			playerNameToPid.set(`${t.tid}:${key}`, p.pid);
+		if (sorted.length === 0) {
+			continue;
 		}
 
-		const playerList = topPlayers
-			.map((p, idx) => {
-				const r = p.ratings.at(-1)!;
-				const yrs = p.contract.exp - season + 1;
-				const tag = idx === 0 ? " [FRANCHISE — DO NOT OFFER]" : "";
-				return `  - ${p.firstName} ${p.lastName} (${r.pos}, age ${season - p.born.year}, OVR ${r.ovr}, ${yrs}yr)${tag}`;
-			})
-			.join("\n");
+		const toEntry = (p: (typeof sorted)[number]): TradableRosterPlayer => {
+			const r = p.ratings.at(-1)!;
+			return {
+				pid: p.pid,
+				name: `${p.firstName} ${p.lastName}`,
+				pos: r.pos,
+				age: season - p.born.year,
+				ovr: r.ovr,
+				yrs: p.contract.exp - season + 1,
+			};
+		};
 
-		const record = recordByTid[t.tid] ?? "?-?";
-		teamEntries.push(
-			`${t.region} ${t.name} [tid:${t.tid}] (${record}):\n${playerList}`,
-		);
+		teamRosterInfos.push({
+			tid: t.tid,
+			teamName: `${t.region} ${t.name}`,
+			record: recordByTid[t.tid] ?? "?-?",
+			franchisePlayer: toEntry(sorted[0]!),
+			tradablePlayers: sorted.slice(1).map(toEntry),
+		});
 	}
 
-	const prompt = `You are an expert NBA historian and GM advisor. The basketball simulation is set in the **${season}-${season + 1} NBA season**.
+	if (teamRosterInfos.length === 0) {
+		return { offers: null, rateLimited: false };
+	}
+
+	let rateLimited = false;
+
+	// --- Step 1: shortlist teams + one-line need + protected player ---
+	// A condensed view (franchise player + top 3 tradable) is enough context
+	// to name a "protect" player without paying for every team's full roster
+	// in this pass -- that full roster only matters in step 3, scoped to one
+	// team at a time.
+	const shortlistEntries = teamRosterInfos.map((t) => {
+		const shown = [t.franchisePlayer, ...t.tradablePlayers.slice(0, 3)];
+		const list = shown
+			.map((p, idx) => {
+				const tag = idx === 0 ? " [FRANCHISE]" : "";
+				return `  - ${p.name} (${p.pos}, age ${p.age}, OVR ${p.ovr})${tag}`;
+			})
+			.join("\n");
+		return `${t.teamName} [tid:${t.tid}] (${t.record}):\n${list}`;
+	});
+
+	const shortlistPrompt = `You are an NBA front-office analyst. The basketball simulation is set in the **${season}-${season + 1} NBA season**.
 
 A player is available on the trading block:
 ${offeredDesc}
 
-**Critical instructions:**
-1. ROSTER DATA IS GROUND TRUTH. Every player listed below is currently on that team right now in ${season}. Do not assume any trades, departures, or roster changes that are not reflected in the data. If a player appears on a team's roster, they are there — regardless of what you know about real NBA history after ${season}.
-2. NEVER include a [FRANCHISE — DO NOT OFFER] player in an offer. They are context only.
-3. NEVER include in an offer a player your reasoning identifies as the key reason the team wants this trade target (e.g. if you say "to pair with X", X must not be in the offer).
-4. Only name players from that team's exact roster. Do not invent players.
-5. Use your knowledge of each player's real reputation, attitude, locker-room presence, and injury history as of ${season} to judge which teams would realistically pursue the trade target — and at what price.
-6. Use your knowledge of each team's real organizational culture, coaching staff, and roster needs as of ${season} to determine who are realistic suitors.
-7. Propose 3–5 teams. For each, name 1–3 tradeable (non-franchise) players they would offer.
+Below is every other team, their record, and a few of their key players (their best/"franchise" player is marked -- teams never trade their franchise player).
 
-League rosters:
-${teamEntries.join("\n\n")}
+${shortlistEntries.join("\n\n")}
+
+Task: pick ${MAX_SHORTLIST_TEAMS} teams that would realistically want to trade for this player. You are NOT choosing a trade package yet -- that happens in a later step. Do not name any player except in the optional "protectPlayer" field below.
+
+For each team, respond with:
+- "tid": the exact tid number from brackets above
+- "needSummary": one sentence -- why this specific team wants this player right now, and whether their real-world reputation makes them a realistic or unlikely suitor
+- "protectPlayer": if your needSummary names a specific player on this team's roster (e.g. "to pair with X" or "X needs more help"), put that player's exact name here so they are protected from being traded away later. Otherwise use an empty string "".
+
+ROSTER DATA IS GROUND TRUTH -- use only the teams and players listed above, exactly as listed. Use your knowledge of real NBA player reputations, team culture, and organizational needs as of ${season} to judge fit and realism.
 
 Respond ONLY with valid JSON, no markdown fences:
 {
-  "offers": [
-    {
-      "tid": <exact tid number from brackets above>,
-      "players": ["First Last"],
-      "reasoning": "Two sentences: why this team wants the player AND whether the player's reputation makes them a realistic or unlikely suitor."
-    }
+  "teams": [
+    { "tid": <number>, "needSummary": "...", "protectPlayer": "..." }
   ]
 }`;
 
-	let rateLimited = false;
-	const raw = await callOpenRouter(apiKey, prompt, {
-		// This prompt embeds every non-user team's roster (~29 teams), much larger
-		// than the trade-veto or game-recap prompts. The default 20s timeout was
-		// measured to reliably clip Hy3's response to it (Hy3 is a large 295B MoE
-		// model — slower to generate a full multi-team JSON response with
-		// reasoning than Gemini Flash was), silently falling back to non-AI
-		// offers every time. Match season story's 30s budget for the same reason.
-		timeoutMs: 30000,
+	const shortlistRaw = await callOpenRouter(apiKey, shortlistPrompt, {
+		timeoutMs: 20000,
 		onError: (info) => {
-			if (info.status === 429) rateLimited = true;
+			if (info.status === 429) {
+				rateLimited = true;
+			}
 		},
 	});
-	if (!raw) return { offers: null, rateLimited };
-
-	// Strip markdown fences if present
-	const cleaned = raw
-		.replace(/^```(?:json)?\s*/i, "")
-		.replace(/\s*```$/i, "")
-		.trim();
-
-	let parsed: { offers: OpenRouterOfferRaw[] };
-	try {
-		parsed = JSON.parse(cleaned);
-	} catch {
-		// Try extracting JSON object from within the response
-		const match = cleaned.match(/\{[\s\S]*\}/);
-		if (!match) return { offers: null, rateLimited };
-		try {
-			parsed = JSON.parse(match[0]);
-		} catch {
-			return { offers: null, rateLimited };
-		}
+	if (!shortlistRaw) {
+		return { offers: null, rateLimited };
 	}
 
-	if (!Array.isArray(parsed?.offers)) return { offers: null, rateLimited };
+	const shortlistParsed = extractJsonObject<ShortlistRaw>(shortlistRaw);
+	if (!shortlistParsed || !Array.isArray(shortlistParsed.teams)) {
+		return { offers: null, rateLimited };
+	}
+
+	// --- Step 2 (code, no LLM call): resolve + drop the protected player ---
+	const teamRosterByTid = new Map(teamRosterInfos.map((t) => [t.tid, t]));
+	const seenTids = new Set<number>();
+	const shortlist: {
+		info: TeamRosterInfo;
+		needSummary: string;
+		tradablePlayers: TradableRosterPlayer[];
+	}[] = [];
+
+	for (const entry of shortlistParsed.teams) {
+		if (shortlist.length >= MAX_SHORTLIST_TEAMS) {
+			break;
+		}
+		if (typeof entry.tid !== "number" || seenTids.has(entry.tid)) {
+			continue;
+		}
+		const info = teamRosterByTid.get(entry.tid);
+		if (!info) {
+			continue;
+		}
+		seenTids.add(entry.tid);
+
+		const protectName =
+			typeof entry.protectPlayer === "string"
+				? entry.protectPlayer.trim().toLowerCase()
+				: "";
+		const tradablePlayers = protectName
+			? info.tradablePlayers.filter((p) => p.name.toLowerCase() !== protectName)
+			: info.tradablePlayers;
+		if (tradablePlayers.length === 0) {
+			continue;
+		}
+
+		const needSummary =
+			typeof entry.needSummary === "string" && entry.needSummary.trim()
+				? entry.needSummary.trim()
+				: `Interested in trading for ${offeredPlayers.map((p) => `${p.firstName} ${p.lastName}`).join(" and ")}.`;
+
+		shortlist.push({ info, needSummary, tradablePlayers });
+	}
+
+	if (shortlist.length === 0) {
+		return { offers: null, rateLimited };
+	}
+
+	// --- Step 3: per-team asset selection, scoped to that team's already- ---
+	// --- filtered roster. The protected player is structurally absent    ---
+	// --- from both the prompt and the name→pid lookup below, so naming   ---
+	// --- them (even by hallucination) can't resolve to a pid.            ---
+	const offerSelectionResults = await Promise.all(
+		shortlist.map(async (entry) => {
+			const rosterList = entry.tradablePlayers
+				.map(
+					(p) =>
+						`  - ${p.name} (${p.pos}, age ${p.age}, OVR ${p.ovr}, ${p.yrs}yr)`,
+				)
+				.join("\n");
+
+			const prompt = `You are an NBA front-office analyst for the ${entry.info.teamName} (${entry.info.record}) during the ${season} season.
+
+Your team wants to trade for: ${offeredDesc}
+Why: ${entry.needSummary}
+
+Here is your team's tradable roster. These are the ONLY players you may offer -- do not name anyone else:
+${rosterList}
+
+Task: pick 1 to 3 players from the list above that your team would realistically include in this trade offer. Match value roughly to what a team would give up for the target, not just your best remaining players.
+
+Respond ONLY with valid JSON, no markdown fences, using exact names from the list above:
+{ "players": ["First Last"] }`;
+
+			const raw = await callOpenRouter(apiKey, prompt, {
+				timeoutMs: 15000,
+				onError: (info) => {
+					if (info.status === 429) {
+						rateLimited = true;
+					}
+				},
+			});
+			if (!raw) {
+				return null;
+			}
+
+			const parsed = extractJsonObject<OfferSelectionRaw>(raw);
+			if (!parsed || !Array.isArray(parsed.players)) {
+				return null;
+			}
+
+			const nameToPid = new Map(
+				entry.tradablePlayers.map((p) => [p.name.toLowerCase(), p.pid]),
+			);
+			const resolvedPids: number[] = [];
+			for (const name of parsed.players) {
+				if (typeof name !== "string") {
+					continue;
+				}
+				const pid = nameToPid.get(name.toLowerCase());
+				if (pid !== undefined && !resolvedPids.includes(pid)) {
+					resolvedPids.push(pid);
+				}
+				if (resolvedPids.length >= 3) {
+					break;
+				}
+			}
+			if (resolvedPids.length === 0) {
+				return null;
+			}
+
+			return { entry, resolvedPids };
+		}),
+	);
 
 	// Resolve each offer to pids and run makeItWork to balance value
 	const results: TradingBlockOffer[] = [];
 
-	for (const offer of parsed.offers) {
-		if (typeof offer.tid !== "number") continue;
-
-		const resolvedPids: number[] = [];
-		for (const name of offer.players ?? []) {
-			const key = `${offer.tid}:${name.toLowerCase()}`;
-			const pid = playerNameToPid.get(key);
-			if (pid !== undefined) resolvedPids.push(pid);
+	for (const selection of offerSelectionResults) {
+		if (!selection) {
+			continue;
 		}
-
-		if (resolvedPids.length === 0) continue;
+		const { entry, resolvedPids } = selection;
 
 		const tradeTeams: TradeTeams = [
 			{
@@ -388,7 +587,7 @@ Respond ONLY with valid JSON, no markdown fences:
 				dpidsExcluded: [],
 			},
 			{
-				tid: offer.tid,
+				tid: entry.info.tid,
 				pids: resolvedPids,
 				pidsExcluded: [],
 				dpids: [],
@@ -405,7 +604,9 @@ Respond ONLY with valid JSON, no markdown fences:
 		if (balanced) {
 			results.push({
 				teams: balanced,
-				reasoning: offer.reasoning ?? "",
+				// Written in step 1, before the model knew which players would
+				// end up in the offer -- it cannot contradict a pick it never saw.
+				reasoning: entry.needSummary,
 			});
 		}
 	}

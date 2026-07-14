@@ -76,10 +76,21 @@ Switched from Google AI Studio (Gemini) to OpenRouter on 2026-07-10 — same pro
 
 ### Architecture
 
-- **Single API call** covers all 29 teams
 - **`makeItWork`** is called post-generation to balance trade value after the model's player selections
-- **Franchise player protection** is enforced at two levels: prompt tag `[FRANCHISE — DO NOT OFFER]` on each team's #1 player, and code exclusion from the `playerNameToPid` lookup map
+- **Franchise player protection** is structural, not prompted: each team's #1 player is tracked in a separate `franchisePlayer` field and never appears in `tradablePlayers` at all, so it's never an option the model could pick
 - **Fallback**: if the model fails or returns nothing, standard offers are generated and a yellow warning banner is shown in the UI
+
+### Trade offer generation is multi-step, not one mega-prompt
+
+The original design was **one API call** covering all ~29 teams: pick suitors, write the "why," and select which players to offer, all in a single JSON generation. In practice the free-tier model would write reasoning like "they'd want this to pair with their star X" and then include X in the actual offer — nothing forced it to track that constraint across a long, repetitive multi-team blob. Redesigned (2026-07-14) into three narrower back-and-forth exchanges, each asking for the simplest possible field, with the "don't offer the player your own reasoning was just about" constraint enforced **in code** instead of by instruction:
+
+1. **Shortlist** (1 call, all teams at once) — pick `MAX_SHORTLIST_TEAMS` (3) suitor teams; for each, a one-sentence `needSummary` and an optional `protectPlayer` naming the specific roster player that reasoning is about.
+2. **Filter** (no LLM call) — resolve `protectPlayer` to a pid and drop it from that team's tradable list before the next step ever sees it. A dumb model can't violate a constraint about an option it was never shown.
+3. **Per-team asset selection** (1 call per shortlisted team, run in parallel) — scoped to only that team's already-filtered roster: "pick 1-3 of these to offer." No reasoning, no other teams, nothing left to be inconsistent with.
+
+The final `reasoning` text shown in the UI is step 1's `needSummary`, assembled in code — the model never writes prose after seeing the actual offer, so it structurally cannot contradict it. Implemented in `generateTradingBlockOffers` in `src/worker/util/openrouter.ts`; see the large comment block above that function for the full design rationale.
+
+**Cost**: up to 1 + `MAX_SHORTLIST_TEAMS` = 4 calls per "Generate Offers" click against the shared 50/day free-tier quota (was 1 call before). `MAX_SHORTLIST_TEAMS` is capped at 3 (not the old 3-5) specifically to bound this; each call is also much smaller/simpler than the old mega-prompt (one team's roster instead of 29), so per-call timeouts are shorter (20s / 15s vs. the old 30s).
 
 ### AI-to-AI veto
 
@@ -95,10 +106,11 @@ Primary model is **`tencent/hy3:free`** — OpenRouter's #1 free model by usage 
 
 Two free fallbacks from different labs — `openai/gpt-oss-120b:free` and `google/gemma-4-31b-it:free` — are passed in OpenRouter's `models` array, tried in order **within the same request** if the primary model's provider is down or rate-limited. This doesn't cost extra against the daily quota (OpenRouter bills/counts whichever model actually answered) and specifically mitigates "free-tier usage of popular models can be rate-limited by the provider during peak times," which the pricing FAQ calls out as expected behavior for exactly this kind of high-traffic free model.
 
-**⚠️ Free-tier quota gotcha (the OpenRouter equivalent of the old thinking-model gotcha):** the free tier is **50 requests/day and 20 requests/minute, shared across the whole account** — not per-model, not per-feature. Every AI feature in this fork (trade veto, trade offers, game recap, season story) draws from the same 50/day budget. Two consequences baked into the code:
+**⚠️ Free-tier quota gotcha (the OpenRouter equivalent of the old thinking-model gotcha):** the free tier is **50 requests/day and 20 requests/minute, shared across the whole account** — not per-model, not per-feature. Every AI feature in this fork (trade veto, trade offers, game recap, season story) draws from the same 50/day budget. Trade offer generation is the biggest single consumer of that budget per user action — up to 4 calls per click since the multi-step redesign above, vs. 1 call for every other feature in this file. Three consequences baked into the code:
 
-1. `callOpenRouterWithRetry` (season story's two passes) does **not** retry when the first failure was a 429 — retrying a rate-limited call within the same request immediately re-fails and burns a second unit of a already-scarce daily quota for a guaranteed duplicate. It still retries once on a non-429 failure (timeout/network/cold-start).
-2. Trade veto, trade offers, and game recap all surface a distinct "OpenRouter's free-tier rate limit was hit" banner (via the same `onError`/429-detection plumbing) instead of the generic "AI unavailable" message, so a user who's burned through the day's quota gets an accurate reason rather than a "did I forget to set my key?" prompt.
+1. `callOpenRouterWithRetry` (season story's two passes) does **not** retry when the first failure was a 429 — retrying a rate-limited call within the same request immediately re-fails and burns a second unit of a already-scarce daily quota for a guaranteed duplicate. It still retries once on a non-429 failure (timeout/network/cold-start). Trade offer generation's steps 1 and 3 deliberately do **not** use this retry wrapper (a bare `callOpenRouter` call) for the same reason, times four call sites — a retry storm across up to 4 sequential/parallel calls would burn quota fast for likely-duplicate failures.
+2. Trade veto, trade offers, and game recap all surface a distinct "OpenRouter's free-tier rate limit was hit" banner (via the same `onError`/429-detection plumbing) instead of the generic "AI unavailable" message, so a user who's burned through the day's quota gets an accurate reason rather than a "did I forget to set my key?" prompt. For trade offers this checks whether _any_ of the up-to-4 calls hit a 429.
+3. Trade offer generation degrades gracefully per-team: if step 3 fails for one shortlisted team (timeout, malformed JSON, 429), that team is just dropped from the results instead of failing the whole request — the user still sees offers from whichever teams' calls succeeded.
 
 A $10 lifetime credit top-up (not a subscription) raises the cap to 1,000 requests/day — mentioned in the Global Settings help text as the fix if the 50/day cap becomes a real constraint.
 
@@ -130,11 +142,13 @@ Standard OpenAI-compatible chat completions shape (`messages`, `temperature`, `m
 
 ### Prompt instructions (critical constraints)
 
-1. ROSTER DATA IS GROUND TRUTH — the model must not assume trades or departures not in the data
-2. NEVER offer a `[FRANCHISE — DO NOT OFFER]` player
-3. NEVER offer a player cited as the pairing reason (e.g. "to pair with X" → X cannot be in the offer)
-4. Only name players from that team's exact roster
-5. Use NBA knowledge as of the current sim season year
+Split across the three steps described above rather than one prompt:
+
+1. ROSTER DATA IS GROUND TRUTH — the model must not assume trades or departures not in the data (steps 1 and 3)
+2. Franchise players are never shown as an offerable option in any step — nothing to instruct, they're just not in the data
+3. The "pairing reason" player (e.g. "to pair with X") is named explicitly in step 1's `protectPlayer` field, then removed from the roster list step 3 sees — enforced in code, not by asking the model to remember
+4. Only name players from that team's exact (already-filtered) roster (step 3)
+5. Use NBA knowledge as of the current sim season year (steps 1 and 3)
 
 ### iOS Safari fix
 
