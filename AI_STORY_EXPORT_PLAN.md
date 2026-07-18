@@ -147,6 +147,31 @@ Don't pass it through raw; compress each pair to a compact `rivalries`-table sum
 - **Derived canon tables**: <1–2 MB. Trivially loadable — foundational-article fuel.
 - **Bulk box-score layer**: ~340 MB, sharded per season, fetched only on drill-in.
 
+### 4a. Game-access model — index + notable shard + filter script
+
+Nobody wants the 340 MB box-score bulk loaded whole, but articles do need *specific* games
+("all of Yao's games," "just his notable ones"). Three pieces make that cheap:
+
+- **Game index** (`gameIndex.json`, a few MB): one compact row per game —
+  `gid, season, playoffs, tids, winnerTid, margin, pids[], notability, topScorerPid`. This is the
+  queryable spine: an agent filters the index (e.g. `pids` contains a pid, `notability ≥ t`), gets a
+  gid list, then fetches only those gids from the season shards. It never scans the box-score bulk.
+- **Notable-games shard** (ships in the compact bundle): the subset of full box scores flagged
+  notable, so most articles get game-level color with **no scripting**. Notability =
+  produced a `playerFeat` ∪ any player's per-game "game score" ≥ threshold ∪ playoff
+  clincher/elimination ∪ statement margin vs. a strong team. All thresholds live in one tunable
+  constant. Per-*player* notable games = games where that player's own game score is high or he
+  recorded a feat / season career-high.
+- **Filter script** (`pull_games.py`, shipped in the bundle): the "agent runs a script to grab the
+  games it needs" path. `pull_games --pid <yao> [--notable] [--season …] [--playoffs]` reads the
+  index, resolves matching gids, and streams just those box scores out of the sharded bulk in
+  constant memory (same `ijson`/streaming pattern used to derive this plan's schema). Works whether
+  the agent wants *all* Yao games or only his notable ones.
+
+So the box-score dilemma resolves as: the **default bundle is compact KB + canon + game index +
+notable-games shard + `pull_games.py`** (~20-something MB). The full per-season box-score bulk is an
+**opt-in "include full game detail"** download the script reaches into on demand.
+
 ## 5. The canon-first pipeline
 
 A swarm writing hundreds of pieces will contradict itself without a shared canon. The pipeline is
@@ -171,9 +196,11 @@ persisting articles in a new league-DB store) is deferred to Phase 3.
 ## 6. Format & packaging
 
 - **Bundle of normalized, ID-linked JSON tables** — `players.json`, `teams.json`, `seasons.json`,
-  `playoffSeries.json`, `awards.json`, `events.json`, `rankings.json`, `relationships.json`, plus a
-  sharded `games/season-<yyyy>.json` bulk dir — plus `README.md` + `canon-workflow.md` (prompt
-  library + tier ordering). Compact JSON. A single-file option for convenience.
+  `playoffSeries.json`, `awards.json`, `events.json`, `rankings.json`, `relationships.json`,
+  `gameIndex.json`, a `notableGames.json` shard, and `pull_games.py` (§4a) — plus, opt-in, a sharded
+  `games/season-<yyyy>.ndjson` bulk dir — plus `README.md` + `canon-workflow.md` (prompt library +
+  tier ordering). Compact JSON; the bulk shards are NDJSON (line-addressable/streamable). A
+  single-file option for convenience.
 - **Ground-truth preamble** in the README: "these are fictional simulated players; the data here is
   the complete and authoritative record; do not import real-world facts." (Same constraint that
   Feature 2's prompts lean on — it matters just as much for a strong model.)
@@ -190,8 +217,13 @@ persisting articles in a new league-DB store) is deferred to Phase 3.
   `relationships`. (Needs a whole-league pass, like `buildSeasonGroundTruth` but league-wide/all-time
   — the streaming one-record model can't do global ranking.)
 - `buildKnowledgeBase.ts` — orchestrates project + derive → the table set.
-- `serialize.ts` — emit multi-file bundle (zip) or single JSON + the workflow docs.
+- `gameNotability.ts` — per-game "game score" + notability flags (§4a); builds `gameIndex` and the
+  `notableGames` shard. Single tunable thresholds constant.
+- `serialize.ts` — emit multi-file bundle (zip) or single JSON + the workflow docs + `pull_games.py`.
 - `context.ts` — the ring walk: given a focal seed, pull the relevant dossiers.
+
+**Shipped in the bundle (not app source):** `pull_games.py` — the index-driven, constant-memory
+box-score filter (§4a), emitted verbatim by `serialize.ts`.
 
 **New:** `src/common/storyWorkflow.ts` (tiered prompts + canon-index schema, shipped as data);
 `src/ui/views/ExportStory.tsx` + `src/worker/views/exportStory.ts` (options: full-league KB vs
@@ -209,23 +241,28 @@ inline "Export for AI" buttons next to the existing generate buttons in `GameLog
 ## 8. Phasing
 
 1. **Phase 1 — Knowledge base + canon seeds.** Entity projections with cross-refs (§3a) + derived
-   ranking/relationship tables (§3b) + serialization (§6) + the sharded bulk layer + the Tier-1
-   workflow/prompts. This is "export as much interconnected info as possible" and directly produces
-   the foundational-article seeds. With Phase 1 alone the user can run the foundational stage
-   through their swarm.
+   ranking/relationship tables (§3b) + the game index, notable-games shard, and `pull_games.py`
+   (§4a) + serialization (§6) + the Tier-1 workflow/prompts. The default bundle is the compact
+   KB + canon + index + notable shard (~20-something MB); the full box-score bulk is the opt-in
+   "include full game detail" download. This is "export as much interconnected info as possible" and
+   directly produces the foundational-article seeds — with Phase 1 alone the user can run the
+   foundational stage through their swarm.
 2. **Phase 2 — Tier-2 scoped exports + canon feedback.** Season/player/game/league-year bundles that
    include relevant Tier-1 canon; define + support canon-index re-import for consistency.
 3. **Phase 3 — Persistence / niceties.** Optional league-DB store for generated articles + in-app
-   browser; the one un-derivable exception from §1b (user-authored tags: manual rivalry/favorite
-   flags); dynasty/multi-season pieces.
+   browser; dynasty/multi-season pieces reusing the same engine.
 
-## 9. Open questions / deferred
+## 9. Resolved decisions
 
-- **Bulk-layer delivery** — a full-league bundle including sharded box scores is ~340 MB; confirm
-  whether Phase 1 ships box scores at all, or defers them to a "include game detail" opt-in (default
-  off) so the first bundle is the ~20 MB compact KB + canon.
-- **`headToHeads` vs. recompute** — use the pre-aggregated store, or recompute rivalries from
-  `games`/`playoffSeries` for control over the metric? Leaning: use `headToHeads` for the raw pair
-  W/L, recompute only the "closeness/drama" scoring.
-- **User-authored context** — the only thing that would justify a real stored field (manual rivalry
-  designation, favorite-player tag). Deferred to Phase 3; everything foundational is derivable.
+Settled 2026-07-18:
+
+- **Bulk-layer delivery → index + notable shard + on-demand script (§4a).** Phase 1's default bundle
+  ships the compact KB + canon + `gameIndex.json` + `notableGames.json` + `pull_games.py`, not the
+  340 MB of box scores. Full per-season box-score shards are an opt-in "include full game detail"
+  download; the script reaches into them to pull exactly the games an article needs (all of a
+  player's games, or only the notable ones), driven by the index in constant memory.
+- **`headToHeads` → reuse, don't recompute.** Use the pre-aggregated store for raw pair W/L
+  (regular season + playoffs); compute only the "closeness/drama" ranking on top for the `rivalries`
+  table.
+- **User-authored context → no.** Everything foundational is derivable; no manual-tag stored field.
+  (The Phase 3 "user tags" idea is dropped, not merely deferred.)
