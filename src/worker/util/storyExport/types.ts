@@ -252,6 +252,32 @@ export type GameIndexRow = {
 };
 
 // ---------------------------------------------------------------------------
+// Assembled knowledge base (the full Phase 1 table set)
+// ---------------------------------------------------------------------------
+
+export type KnowledgeBaseMeta = {
+	format: "zengm-story-export";
+	version: number;
+	leagueName: string | undefined;
+	generatedAtSeason: number | undefined; // the save's current season
+	counts: {
+		players: number;
+		teams: number;
+		games: number;
+		seasons: number;
+	};
+};
+
+export type KnowledgeBase = {
+	meta: KnowledgeBaseMeta;
+	players: ProjectedPlayer[];
+	teams: ProjectedTeam[];
+	canon: CanonTables;
+	gameIndex: GameIndexRow[];
+	notableGids: number[];
+};
+
+// ---------------------------------------------------------------------------
 // Projected entity tables (the compact KB; the plan's §3a)
 // ---------------------------------------------------------------------------
 
