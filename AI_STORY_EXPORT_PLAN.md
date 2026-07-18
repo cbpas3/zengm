@@ -1,0 +1,231 @@
+# AI Story Export — Design & Build Plan
+
+Status: **proposed, 2026-07-18.** Not yet implemented. This doc is the spec; when built, a
+"Feature 10: AI Story Export" summary goes in CLAUDE.md and this file gets a status banner like the
+other `*_PLAN.md` docs.
+
+## 0. Motivation
+
+Features 3a/3b (AI game recaps + season retrospectives) call a small free OpenRouter model
+on-device. The writing quality ceiling is the model, and the free tier isn't good enough for the
+kind of narrative the user actually wants to read. This feature inverts the approach: **instead of
+generating text on-device, export a rich, interconnected knowledge base and hand it to a stronger
+external model (or a swarm of agents) that acts as an investigative sportswriter.** The fork's job
+becomes producing *facts + structure + prompts*; the writing happens off-device with a frontier
+model the user brings.
+
+Two hard requirements shaped by the design conversation:
+
+1. **Historical/relational context is the whole point.** A flat dump of one season or one career is
+   data, not a story. What makes a title mean something is the web around it — the opponent's
+   all-time standing, a prior Finals loss to that same team, a franchise's title drought, a player's
+   career arc across teams. The export must carry that web, not just the focal facts.
+2. **The consumer is an agent swarm.** The export must be *navigable* (start at an entity, traverse
+   to related ones by ID), which means normalized ID-linked tables, not one prose blob. And
+   **foundational canon comes first** — "greatest players / teams / busts" get written before
+   dependent pieces, so later articles reference an established, self-consistent canon.
+
+## 1. Reality check against a real export
+
+Validated against the user's actual save: `BBGM_League_23_2022_regular_season` — a ~75-season
+league, **390 MB** uncompressed (60 MB gzipped), schema extracted via constant-memory streaming
+(`jq --stream` / `ijson`). Findings that drive every decision below:
+
+### 1a. Where the 390 MB lives
+
+From leaf-token counts (~35.9M total):
+
+| Store                        | Share of payload | Role                                                          |
+| ---------------------------- | ---------------- | ------------------------------------------------------------ |
+| **`games`**                  | **~89%** (31.9M) | Full per-player box scores for every game. This *is* the file. |
+| `players`                    | ~9% (3.26M)      | Career data — much of which is itself cosmetic/financial noise |
+| everything else combined     | ~2% (0.65M)      | teams, events, awards, playoffSeries, headToHeads, …          |
+
+**The entire narrative knowledge base — everything except game box scores — is ~11% of the file,
+and much smaller after trimming noise.** This is the single most important fact in this plan: the
+history-writing layer is small; the box-score bulk is big but rarely needed whole.
+
+### 1b. The interconnections are already latent in the data
+
+Several things originally scoped as "derive it" are already present, which is why enrichment
+happens at the **export-projection layer, never the live IndexedDB schema** (no migrations, no
+upstream-merge risk, no staleness):
+
+- `players[].transactions[]` — every draft/trade/FA move (`type`, `fromTid`, `tid`, `season`,
+  `phase`, `eid`). The career-movement timeline ("left, won elsewhere, came back") is prebuilt.
+- `players[].stats[]` per season, tagged with `tid` + `playoffs`, incl. advanced stats
+  (`per`, `ws`, `vorp`, `bpm`, `ortg`, `usgp`) and per-season game highs (`ptsMax`, …).
+- `players[].ratings[]` per season (full trajectory); `hof`, `retiredYear`, `diedYear`,
+  `relatives[]`, `draft` (pick/round/year/`originalTid`), `value`, `college`, `born`, `statsTids[]`.
+- `headToHeads` — pairwise franchise W/L for **both** regular season and playoffs, already
+  aggregated. Rivalry data is mostly pre-computed (see §4 for the key-explosion caveat).
+- `teams[].seasons[]` — full franchise history incl. `playoffRoundsWon` (title detection),
+  div/conf splits, `ovrStart/End`, `streak`, `avgAge`.
+- `playoffSeries[]` — complete brackets with per-series `gids`, seeds, `winp`.
+- `awards[]` — every league award per season (MVP, DPOY, Finals MVP, All-League, All-Defensive,
+  All-Rookie, best record, …).
+- The fork's dev-system fields survive the export (`devFocus`, `devOverride`, `devProfile`,
+  `focusFloor`) — breakthrough/mentorship texture is available.
+
+### 1c. Positioning vs. the existing raw export
+
+`ExportLeague` (`makeExportStream.ts`) already streams the whole DB, but it emits the **internal
+storage schema verbatim** — verbose, full of narrative-irrelevant fields, and *flat* (a record
+doesn't know what it relates to). This feature is a **narrative-optimized projection**: trimmed to
+what matters for writing, enriched with computed cross-references and rankings, ID-linked for agent
+traversal. We reuse its cursor/streaming plumbing for the bulk layer, not its output shape.
+
+## 2. Architecture — focal subject + concentric context, over a normalized KB
+
+The export is one knowledge base plus a canon-first article pipeline. Not five separate exporters —
+one context engine with different focal seeds.
+
+```
+        Ring 3: League-historical benchmarks     "is this number notable?"  (all-time ranks)
+          Ring 2: Relational dossiers            opponent history, rivalries, prior meetings,
+            Ring 1: Continuity                    key players' arcs, relatives, division context
+              FOCAL SUBJECT (full fidelity)       the game / season / career / league-year
+```
+
+- **Focal subject** → full fidelity.
+- **Rings 1–2 (directly related entities)** → rich but capsule-form (opponent gets a history
+  paragraph, not their whole box-score archive; a key player gets a career timeline, not every game).
+- **Ring 3 (league-historical)** → only the comparisons that make a focal number mean something
+  ("4th-best win total in franchise history, 12th league-wide"), not raw leaderboards.
+
+Relevance selection — *what* each ring includes — is also the token-control lever (see §6).
+
+## 3. The table set
+
+### 3a. Entity tables (projected + cross-linked)
+
+Each carries: a **stable id**, **foreign keys** to related entities, and **derived rollups**.
+
+| Table          | Source                    | Added cross-refs / rollups                                                   |
+| -------------- | ------------------------- | ---------------------------------------------------------------------------- |
+| `players`      | `players` (trimmed)       | `teamsPlayedFor[]`, `seasonsByTeam`, `relativePids[]`, `careerTitles`, `allTimeRank{}`, `peakSeason`, dev-system texture |
+| `teams`        | `teams` (minus financials)| `titleSeasons[]`, `titleDrought`, `allTimeWinRankSingleSeason`, `divisionRivalTids[]` |
+| `teamSeasons`  | `teams[].seasons`         | link to `playoffSeriesId`, `rosterPids[]`                                    |
+| `seasons`      | `awards` + league attrs   | champion tid, award winners, statistical leaders                            |
+| `games`        | `games` (**bulk layer**)  | `winnerTid`/`loserTid`, `playoffSeriesId`, `notablePerformancePids[]` — sharded by season |
+| `playoffSeries`| `playoffSeries`           | `gids[]`, participant links                                                  |
+| `awards`       | `awards`                  | winner pids/tids                                                             |
+| `events`       | `events` (type: trade/…) | participant tids/pids                                                        |
+
+### 3b. Derived tables (the interconnection payload + canon seeds)
+
+Tiny (<1–2 MB total), computed by a full-league aggregation pass. These are the fuel for the
+foundational articles.
+
+| Table                | Computed from                              | Seeds foundational article |
+| -------------------- | ------------------------------------------ | -------------------------- |
+| `rankings.players`   | `value`/`hofFactor` + titles + awards + peak | "Greatest Players of All Time" |
+| `rankings.teamSeasons`| wins + `playoffRoundsWon` + margin + roster | "Greatest Teams Ever"     |
+| `rankings.busts`     | `draft.pick`/`round` vs career value delta   | "Biggest Busts"           |
+| `rankings.steals`    | inverse of busts                            | "Biggest Steals"          |
+| `dynasties`          | clustered/consecutive `titleSeasons`         | "Dynasties"               |
+| `rivalries`          | `headToHeads` + `playoffSeries` (close/frequent meetings) | "Great Rivalries" |
+| `relationships`      | `relatives[]`, mentorships (dev system), reunions | player features / texture |
+
+## 4. Keep / trim / bulk classification (from the real schema)
+
+| Bucket | Contents |
+| ------ | -------- |
+| **KEEP** (compact layer) | `players` (minus noise below), `teams[].seasons`, `teams[].stats`, `awards`, `playoffSeries`, `events`, `playerFeats`, `seasonLeaders`, `draftPicks`, `draftLotteryResults`, `scheduledEvents` (franchise renames/relocations), `headToHeads` (compressed — see below) |
+| **TRIM** (drop as pure noise) | all `players[].face.*` (~40 cosmetic fields), `ratings[].fuzz`/`injuryIndex`, all financials (`revenues`, `expenses`, `expenseLevels`, `budget`, `cash`, `hype`, `att`, `stadiumCapacity`, `ownerMood`, `salaries`, `payroll`), `valueFuzz`/`valueNoPotFuzz`, `numPlayersTradedAwayNormalized` (36 internal fields), `messages`, `savedTradingBlock`, `trade`, `schedule`, `releasedPlayers` |
+| **BULK** (separate, sharded by `games[].season`, drill-down only) | `games[]` full box scores |
+
+**`headToHeads` caveat:** stored as an object keyed by every `tidA.tidB` pair with `regularSeason`
+and `playoffs` sub-objects — a ~60k-leaf key-explosion that's schema-noisy but byte-small.
+Don't pass it through raw; compress each pair to a compact `rivalries`-table summary
+(all-time W/L, playoff series meetings, closest/most-recent) an agent can actually read.
+
+### Resulting layer sizes (real numbers)
+
+- **Compact interconnected KB** (KEEP, trimmed): ~15–25 MB raw, less after field-trimming. An agent
+  can hold large slices at once.
+- **Derived canon tables**: <1–2 MB. Trivially loadable — foundational-article fuel.
+- **Bulk box-score layer**: ~340 MB, sharded per season, fetched only on drill-in.
+
+## 5. The canon-first pipeline
+
+A swarm writing hundreds of pieces will contradict itself without a shared canon. The pipeline is
+tiered by dependency; consistency is enforced by a **canon index**.
+
+- **Tier 0 — Facts.** The KB above. Data only, no opinions.
+- **Tier 1 — Foundational canon** (no dependencies). Seeded by the `rankings.*` / `dynasties` /
+  `rivalries` tables (computed ranking + evidence). The swarm writes "All-Time Greats," "Greatest
+  Teams," "Busts/Steals," "Franchise Histories," "Rivalries." **Tier 1 emits structured canonical
+  claims**, not just prose — e.g. `{subject: pid 42, claim: "3rd-greatest player ever", source:
+  "greats-01"}`. That set of claims is the canon index.
+- **Tier 2 — Dependent pieces.** Season retrospectives, player features, game recaps. Each prompt
+  gets Tier-0 facts (scoped to the subject) **plus the relevant Tier-1 canon claims**, so a title
+  recap already "knows" it's the underdog's first ring against a chronicled dynasty and says so
+  consistently with the franchise-history piece.
+
+**Division of labor:** the fork produces Tier 0 (facts), the Tier-1 *seeds* (ranked lists +
+evidence), and a shipped **workflow spec + tiered prompt templates**. The external model/swarm does
+the writing and emits the canon index. Re-importing generated canon as context (and optionally
+persisting articles in a new league-DB store) is deferred to Phase 3.
+
+## 6. Format & packaging
+
+- **Bundle of normalized, ID-linked JSON tables** — `players.json`, `teams.json`, `seasons.json`,
+  `playoffSeries.json`, `awards.json`, `events.json`, `rankings.json`, `relationships.json`, plus a
+  sharded `games/season-<yyyy>.json` bulk dir — plus `README.md` + `canon-workflow.md` (prompt
+  library + tier ordering). Compact JSON. A single-file option for convenience.
+- **Ground-truth preamble** in the README: "these are fictional simulated players; the data here is
+  the complete and authoritative record; do not import real-world facts." (Same constraint that
+  Feature 2's prompts lean on — it matters just as much for a strong model.)
+- **Token control is relevance selection, not JSON-vs-Markdown.** JSON earns its place here because
+  the payload is a *graph* and cross-references must stay unambiguous. No one ever loads the whole
+  390 MB; Tier-1 runs off the <2 MB canon tables, Tier-2 off scoped slices.
+
+## 7. Files
+
+**New `src/worker/util/storyExport/`:**
+
+- `projectEntities.ts` — narrative projections (trim per §4, attach foreign keys).
+- `deriveCanon.ts` — the full-league aggregation pass: `rankings.*`, `dynasties`, `rivalries`,
+  `relationships`. (Needs a whole-league pass, like `buildSeasonGroundTruth` but league-wide/all-time
+  — the streaming one-record model can't do global ranking.)
+- `buildKnowledgeBase.ts` — orchestrates project + derive → the table set.
+- `serialize.ts` — emit multi-file bundle (zip) or single JSON + the workflow docs.
+- `context.ts` — the ring walk: given a focal seed, pull the relevant dossiers.
+
+**New:** `src/common/storyWorkflow.ts` (tiered prompts + canon-index schema, shipped as data);
+`src/ui/views/ExportStory.tsx` + `src/worker/views/exportStory.ts` (options: full-league KB vs
+scoped; which derived tables; bundle vs single file), modeled on `ExportStats.tsx`.
+
+**Reused:** `makeExportStream`'s cursor/streaming plumbing for the bulk `games` layer;
+`buildSeasonGroundTruth` / `boxScore` as focal builders for Tier-2 scoped exports;
+`downloadFile` / `downloadFileStream` for delivery.
+
+**Wiring:** one worker endpoint (`exportStoryData`) + view/route/menu registration
+(`worker/views/index.ts`, `ui/views/index.ts`, `ui/util/routeInfos.ts`, `ui/util/menuItems.tsx`);
+inline "Export for AI" buttons next to the existing generate buttons in `GameLog.tsx` and
+`TeamHistory/SeasonStory.tsx`.
+
+## 8. Phasing
+
+1. **Phase 1 — Knowledge base + canon seeds.** Entity projections with cross-refs (§3a) + derived
+   ranking/relationship tables (§3b) + serialization (§6) + the sharded bulk layer + the Tier-1
+   workflow/prompts. This is "export as much interconnected info as possible" and directly produces
+   the foundational-article seeds. With Phase 1 alone the user can run the foundational stage
+   through their swarm.
+2. **Phase 2 — Tier-2 scoped exports + canon feedback.** Season/player/game/league-year bundles that
+   include relevant Tier-1 canon; define + support canon-index re-import for consistency.
+3. **Phase 3 — Persistence / niceties.** Optional league-DB store for generated articles + in-app
+   browser; the one un-derivable exception from §1b (user-authored tags: manual rivalry/favorite
+   flags); dynasty/multi-season pieces.
+
+## 9. Open questions / deferred
+
+- **Bulk-layer delivery** — a full-league bundle including sharded box scores is ~340 MB; confirm
+  whether Phase 1 ships box scores at all, or defers them to a "include game detail" opt-in (default
+  off) so the first bundle is the ~20 MB compact KB + canon.
+- **`headToHeads` vs. recompute** — use the pre-aggregated store, or recompute rivalries from
+  `games`/`playoffSeries` for control over the metric? Leaning: use `headToHeads` for the raw pair
+  W/L, recompute only the "closeness/drama" scoring.
+- **User-authored context** — the only thing that would justify a real stored field (manual rivalry
+  designation, favorite-player tag). Deferred to Phase 3; everything foundational is derivable.
