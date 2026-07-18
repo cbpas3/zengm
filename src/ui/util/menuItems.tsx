@@ -726,6 +726,14 @@ export const menuItems: (MenuItemLink | MenuItemHeader)[] = [
 			},
 			{
 				type: "link",
+				active: (pageID) => pageID === "exportStory",
+				league: true,
+				commandPalette: true,
+				path: ["export_story"],
+				text: "AI Story Export",
+			},
+			{
+				type: "link",
 				active: (pageID) => pageID === "expansionDraft",
 				league: true,
 				commandPalette: true,

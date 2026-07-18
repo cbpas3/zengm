@@ -2435,6 +2435,16 @@ const generateSeasonStory = async ({
 	return { article: result.article, usedFallback: false, rateLimited: false };
 };
 
+const generateStoryExport = async (options: {
+	includeFullGames?: boolean;
+	includeNotableGames?: boolean;
+}) => {
+	const { buildStoryExportFromDb } = await import(
+		"../util/storyExport/buildFromDb.ts"
+	);
+	return buildStoryExportFromDb(options ?? {});
+};
+
 const ping = async () => {
 	return;
 };
@@ -5400,6 +5410,7 @@ export default {
 		generateFace,
 		generateGameArticle,
 		generateSeasonStory,
+		generateStoryExport,
 		getAutoPos,
 		getBornLoc,
 		getDefaultInjuries,

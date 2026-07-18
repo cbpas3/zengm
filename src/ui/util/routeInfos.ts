@@ -133,6 +133,7 @@ export const routeInfos = {
 	"/l/:lid/power_rankings/:season": "powerRankings",
 	"/l/:lid/power_rankings/:season/:playoffs": "powerRankings",
 	"/l/:lid/export_stats": "exportStats",
+	"/l/:lid/export_story": "exportStory",
 	"/l/:lid/player_feats": "playerFeats",
 	"/l/:lid/player_feats/:abbrev": "playerFeats",
 	"/l/:lid/player_feats/:abbrev/:season": "playerFeats",

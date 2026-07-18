@@ -33,6 +33,7 @@ export { default as expansionDraft } from "./expansionDraft.ts";
 export { default as exportLeague } from "./exportLeague.ts";
 export { default as exportPlayers } from "./exportPlayers.ts";
 export { default as exportStats } from "./exportStats.ts";
+export { default as exportStory } from "./exportStory.ts";
 export { default as fantasyDraft } from "./fantasyDraft.ts";
 export { default as freeAgents } from "./freeAgents.ts";
 export { default as frivolitiesDraftClasses } from "./frivolitiesDraftClasses.ts";
