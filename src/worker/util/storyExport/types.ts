@@ -101,6 +101,7 @@ export type RawTeamSeason = {
 };
 
 export type RawTeamStatsRow = {
+	tid: number;
 	season: number;
 	playoffs: boolean;
 	gp: number;

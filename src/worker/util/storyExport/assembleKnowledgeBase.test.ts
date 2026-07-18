@@ -38,7 +38,7 @@ const rawTeam = (): RawTeam => ({
 	seasons: [
 		{ tid: 0, season: 2015, won: 60, lost: 22, tied: 0, otl: 0, playoffRoundsWon: 4 },
 	],
-	stats: [{ season: 2015, playoffs: false, gp: 82, pts: 9000, oppPts: 8500 }],
+	stats: [{ tid: 0, season: 2015, playoffs: false, gp: 82, pts: 9000, oppPts: 8500 }],
 });
 
 const gameIndexRow = (gid: number): GameIndexRow => ({

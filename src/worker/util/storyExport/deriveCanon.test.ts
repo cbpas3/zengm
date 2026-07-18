@@ -129,12 +129,12 @@ describe("rankTeamSeasons", () => {
 		const champ = team({
 			tid: 0,
 			seasons: [teamSeason(2000, 65, 17, 4)],
-			stats: [{ season: 2000, playoffs: false, gp: 82, pts: 9000, oppPts: 8200 }],
+			stats: [{ tid: 0, season: 2000, playoffs: false, gp: 82, pts: 9000, oppPts: 8200 }],
 		});
 		const goodButOut = team({
 			tid: 1,
 			seasons: [{ ...teamSeason(2000, 60, 22, 0), tid: 1 }],
-			stats: [{ season: 2000, playoffs: false, gp: 82, pts: 8800, oppPts: 8400 }],
+			stats: [{ tid: 1, season: 2000, playoffs: false, gp: 82, pts: 8800, oppPts: 8400 }],
 		});
 
 		const ranked = rankTeamSeasons([goodButOut, champ]);
@@ -215,7 +215,7 @@ describe("findDynasties", () => {
 describe("deriveCanon", () => {
 	test("returns all five tables", () => {
 		const players = [player({ pid: 1, stats: [statRow(2000, 10), statRow(2001, 10), statRow(2002, 10)] })];
-		const teams = [team({ tid: 0, seasons: [teamSeason(2000, 50, 32, 1)], stats: [{ season: 2000, playoffs: false, gp: 82, pts: 8500, oppPts: 8400 }] })];
+		const teams = [team({ tid: 0, seasons: [teamSeason(2000, 50, 32, 1)], stats: [{ tid: 0, season: 2000, playoffs: false, gp: 82, pts: 8500, oppPts: 8400 }] })];
 		const canon = deriveCanon(players, teams);
 		assert.hasAllKeys(canon, [
 			"players",

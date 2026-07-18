@@ -146,3 +146,16 @@ export const serializeBundle = (
 
 // Single-file convenience: everything (except the opt-in box-score bulk) in one JSON object.
 export const serializeSingleFile = (kb: KnowledgeBase): string => json(kb);
+
+// Virtual filesystem: fold the bundle files into one JSON object keyed by path, so the whole bundle
+// can be delivered as a single download without a zip dependency. .json files are embedded as parsed
+// objects (so the result is one navigable JSON); text files (.md/.py/.ndjson) stay strings.
+export const bundleToVirtualFs = (
+	files: BundleFile[],
+): Record<string, unknown> => {
+	const out: Record<string, unknown> = {};
+	for (const f of files) {
+		out[f.path] = f.path.endsWith(".json") ? JSON.parse(f.content) : f.content;
+	}
+	return out;
+};
