@@ -177,3 +177,105 @@ export type CanonTables = {
 	steals: DraftValueEntry[];
 	dynasties: DynastyEntry[];
 };
+
+// ---------------------------------------------------------------------------
+// Projected entity tables (the compact KB; the plan's §3a)
+// ---------------------------------------------------------------------------
+
+export type ProjectedStatLine = {
+	season: number;
+	tid: number;
+	playoffs: boolean;
+	gp: number;
+	min: number;
+	pts: number;
+	trb: number;
+	ast: number;
+	per: number;
+	ws: number;
+	vorp: number;
+};
+
+export type ProjectedRatingsLine = {
+	season: number;
+	ovr: number;
+	pot: number;
+	pos: string;
+};
+
+export type ProjectedPlayer = {
+	pid: number;
+	name: string;
+	pos: string | undefined;
+	bornYear: number;
+	birthLoc: string | undefined;
+	college: string | undefined;
+	draft: {
+		round: number;
+		pick: number;
+		year: number;
+		originalTid: number | undefined;
+		ovr: number | undefined;
+		pot: number | undefined;
+	};
+	hof: boolean;
+	retiredYear: number | undefined;
+	diedYear: number | undefined;
+	real: boolean;
+	devFocus: string | undefined;
+	// Cross-references
+	relatives: { type: string; pid: number; name: string }[];
+	teamsPlayedFor: number[];
+	rings: number;
+	// Career narrative material
+	awards: { season: number; type: string }[];
+	transactions: {
+		type: string;
+		season: number;
+		phase: number;
+		tid: number;
+		fromTid: number | undefined;
+	}[];
+	ratings: ProjectedRatingsLine[];
+	stats: ProjectedStatLine[];
+	careerTotals: {
+		seasons: number;
+		gp: number;
+		pts: number;
+		trb: number;
+		ast: number;
+		ws: number;
+	};
+};
+
+export type ProjectedTeamSeason = {
+	season: number;
+	abbrev: string | undefined;
+	region: string | undefined;
+	name: string | undefined;
+	won: number;
+	lost: number;
+	tied: number;
+	otl: number;
+	playoffRoundsWon: number;
+	ovrStart: number | undefined;
+	ovrEnd: number | undefined;
+};
+
+export type ProjectedTeam = {
+	tid: number;
+	abbrev: string;
+	region: string;
+	name: string;
+	cid: number | undefined;
+	did: number | undefined;
+	disabled: boolean;
+	// Cross-references / rollups
+	divisionRivalTids: number[];
+	titleSeasons: number[];
+	titles: number;
+	titleDrought: number | undefined; // seasons since last title, as of the team's latest season
+	neverWonTitle: boolean;
+	allTime: { won: number; lost: number; winPct: number; seasons: number };
+	seasons: ProjectedTeamSeason[];
+};
