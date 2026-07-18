@@ -217,7 +217,14 @@ describe("deriveCanon", () => {
 		const players = [player({ pid: 1, stats: [statRow(2000, 10), statRow(2001, 10), statRow(2002, 10)] })];
 		const teams = [team({ tid: 0, seasons: [teamSeason(2000, 50, 32, 1)], stats: [{ season: 2000, playoffs: false, gp: 82, pts: 8500, oppPts: 8400 }] })];
 		const canon = deriveCanon(players, teams);
-		assert.hasAllKeys(canon, ["players", "teamSeasons", "busts", "steals", "dynasties"]);
+		assert.hasAllKeys(canon, [
+			"players",
+			"teamSeasons",
+			"busts",
+			"steals",
+			"dynasties",
+			"rivalries",
+		]);
 		assert.isAbove(canon.players.length, 0);
 		assert.isAbove(canon.teamSeasons.length, 0);
 	});

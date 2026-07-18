@@ -120,6 +120,41 @@ export type RawTeam = {
 	stats: RawTeamStatsRow[];
 };
 
+// headToHeads store: per-season, keyed by "tidA.tidB" (tidA < tidB), records from tidA's
+// perspective (won = tidA's wins over tidB). Points fields are tidA's / tidB's totals.
+export type RawHeadToHeadPair = {
+	won: number;
+	lost: number;
+	tied: number;
+	otl: number;
+	otw: number;
+	pts: number;
+	oppPts: number;
+};
+
+export type RawHeadToHead = {
+	season: number;
+	regularSeason: Record<string, RawHeadToHeadPair>;
+	playoffs?: Record<
+		string,
+		{ won: number; lost: number; pts: number; oppPts: number; result?: string; round?: number }
+	>;
+};
+
+// playoffSeries store: per-season, series[round][matchup] with home/away sides.
+export type RawPlayoffMatchupSide = {
+	tid: number;
+	seed: number;
+	won: number;
+	cid?: number;
+	winp?: number;
+};
+
+export type RawPlayoffSeries = {
+	season: number;
+	series: { home: RawPlayoffMatchupSide; away?: RawPlayoffMatchupSide }[][];
+};
+
 // ---------------------------------------------------------------------------
 // Derived canon outputs (the foundational-article fuel; the plan's §3b)
 // ---------------------------------------------------------------------------
@@ -170,12 +205,50 @@ export type DynastyEntry = {
 	titles: number;
 };
 
+export type PlayoffMeeting = {
+	season: number;
+	round: number;
+	winnerTid: number;
+	loserTid: number;
+	winnerWins: number;
+	loserWins: number;
+};
+
+export type RivalryEntry = {
+	tids: [number, number]; // always sorted ascending
+	regularSeason: { aWon: number; bWon: number; tied: number } | undefined;
+	playoffMeetings: PlayoffMeeting[];
+	playoffSeriesCount: number;
+	intensity: number;
+};
+
 export type CanonTables = {
 	players: PlayerRankingEntry[];
 	teamSeasons: TeamSeasonRankingEntry[];
 	busts: DraftValueEntry[];
 	steals: DraftValueEntry[];
 	dynasties: DynastyEntry[];
+	rivalries: RivalryEntry[];
+};
+
+// ---------------------------------------------------------------------------
+// Game index (the plan's §4a) - the queryable spine over the box-score bulk
+// ---------------------------------------------------------------------------
+
+export type GameIndexRow = {
+	gid: number;
+	season: number;
+	playoffs: boolean;
+	finals: boolean;
+	tids: [number, number];
+	winnerTid: number;
+	loserTid: number;
+	margin: number;
+	pids: number[]; // everyone who played (min > 0)
+	topScorerPid: number | undefined;
+	notability: number;
+	notable: boolean;
+	notablePids: number[]; // players whose own game was standout
 };
 
 // ---------------------------------------------------------------------------

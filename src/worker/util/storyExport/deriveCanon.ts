@@ -9,12 +9,15 @@
 // aggregates cleanly across a career, and is a defensible single-number value proxy. Accolades and
 // rings layer on top so peak/greatness isn't purely a longevity count.
 
+import { deriveRivalries } from "./deriveRivalries.ts";
 import type {
 	CanonTables,
 	DraftValueEntry,
 	DynastyEntry,
 	PlayerRankingEntry,
+	RawHeadToHead,
 	RawPlayer,
+	RawPlayoffSeries,
 	RawTeam,
 	TeamSeasonRankingEntry,
 } from "./types.ts";
@@ -321,6 +324,8 @@ export const findDynasties = (teams: RawTeam[]): DynastyEntry[] => {
 export const deriveCanon = (
 	players: RawPlayer[],
 	teams: RawTeam[],
+	playoffSeries: RawPlayoffSeries[] = [],
+	headToHeads: RawHeadToHead[] = [],
 ): CanonTables => {
 	const { busts, steals } = rankDraftValue(players);
 	return {
@@ -329,5 +334,6 @@ export const deriveCanon = (
 		busts,
 		steals,
 		dynasties: findDynasties(teams),
+		rivalries: deriveRivalries(playoffSeries, headToHeads),
 	};
 };
