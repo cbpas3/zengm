@@ -23,7 +23,7 @@
 		"format": "oxfmt",
 		"test": "node --run pre-test && vitest --run",
 		"prepare": "husky",
-		"postinstall": "playwright install"
+		"postinstall": "node -e \"if (!process.env.VERCEL) { require('node:child_process').execSync('playwright install', { stdio: 'inherit' }); }\""
 	},
 	"lint-staged": {
 		"*": "oxfmt --no-error-on-unmatched-pattern"
