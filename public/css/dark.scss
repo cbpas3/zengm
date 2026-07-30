@@ -31,7 +31,10 @@ $cyan: lighten(#17a2b8, 20);
 
 $primary: $orange;
 $secondary: $gray-300;
-$body-secondary-color: $gray-400; // Previously was $text-muted before Bootstrap 5.3
+// Accessibility: $gray-400 (#adb5bd) on the #212529 body gives ~7.0:1, but it's used for a lot of
+// real content (TOT rows, metadata, muted labels), so move up a step to $gray-500 (#ced4da, ~10:1)
+// and reserve the dimmer tone for placeholders only. MOBILE_FIRST_ACCESSIBILITY_PLAN.md §0.
+$body-secondary-color: $gray-500;
 $input-placeholder-color: $gray-400;
 
 $table-bg-scale: 70%;
@@ -39,8 +42,19 @@ $table-hover-bg-factor: 0.1;
 
 $border-color: $gray-200;
 
-// Otherwise, it complains about contrast for buttons
-$min-contrast-ratio: 3;
+// Was 3, which is below WCAG AA (4.5:1). This drives Bootstrap's automatic light-vs-dark text
+// choice on coloured backgrounds (buttons, badges, alerts), so raising it makes the *resting* state
+// of every such component pick the accessible foreground rather than the prettier one.
+//
+// Note: this theme inverts $black/$white (see above), so Bootstrap's $color-contrast-dark is
+// actually white here. Compiling emits 9 `Found no color leading to 4.5:1` warnings, all for
+// hover/active shades that button-variant() derives by *tinting* the base colour — #828a91 from
+// $secondary, #e15361/#e35d6a from $red, and #8872ae/#8c68cd/#917ab9 from $purple. Those land
+// around 3.2-4.4:1: above the 3:1 WCAG threshold for UI components, below this target, and only
+// while a control is hovered or pressed (barely reachable at all on touch). Fixing them properly
+// means darkening the dark theme's secondary/danger/god-mode palette, which is a visual redesign
+// rather than a legibility fix, so it is deliberately left alone. The warnings are informational.
+$min-contrast-ratio: 4.5;
 
 $small-scrollbar-thumb-color: darken($gray-500, 10%);
 $small-scrollbar-thumb-hover-color: $gray-600;

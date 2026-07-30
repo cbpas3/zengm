@@ -14,3 +14,5 @@
 .vercel
 .env*
 .claude
+/tools/a11y/.profile
+/tools/a11y/out

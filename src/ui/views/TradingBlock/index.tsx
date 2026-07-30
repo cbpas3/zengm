@@ -208,7 +208,7 @@ export const Offer = (props: OfferProps) => {
 			{reasoning ? (
 				<p
 					className="text-muted mb-2"
-					style={{ fontSize: "0.9rem", maxWidth: 600 }}
+					style={{ fontSize: "var(--zen-fs-body)", maxWidth: "38rem" }}
 				>
 					<span className="fw-semibold">GM's take: </span>
 					<span className="fst-italic">"{reasoning}"</span>
@@ -888,7 +888,7 @@ const TradingBlock = ({
 										{offer.reasoning ? (
 											<p
 												className="fst-italic text-muted mb-0 mt-2"
-												style={{ fontSize: "0.85rem" }}
+												style={{ fontSize: "var(--zen-fs-body)" }}
 											>
 												"{offer.reasoning}"
 											</p>

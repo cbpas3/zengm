@@ -10,6 +10,7 @@ import {
 	useKeyboardShortcuts,
 } from "../util/keyboardShortcuts.ts";
 import { confirm } from "../util/confirm.tsx";
+import { useBreakpointUp } from "../hooks/useBreakpoint.ts";
 
 const handleOptionClick = (option: Option, event: MouseEvent) => {
 	if (!option.url) {
@@ -68,15 +69,19 @@ const PlayMenu = ({
 
 	const keyboardShortcutsLocal = useLocal((state) => state.keyboardShortcuts);
 
+	// Below sm the Play button is a fixed full-width bar at the bottom of the screen (see
+	// .play-button-wrapper in light.scss) - the single most-used control in the game, moved
+	// into thumb reach. Its menu therefore has to open upward.
+	const smUp = useBreakpointUp("sm");
+
 	if (lid === undefined) {
 		return null;
 	}
 
 	return (
 		<Dropdown
-			className={`play-button-wrapper${
-				window.mobile ? " dropdown-mobile" : ""
-			}`}
+			className={clsx("play-button-wrapper", { "dropdown-mobile": !smUp })}
+			drop={smUp ? "down" : "up"}
 			as={Nav.Item}
 		>
 			<Dropdown.Toggle

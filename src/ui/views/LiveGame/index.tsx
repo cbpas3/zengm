@@ -227,9 +227,15 @@ const PlayByPlay = ({
 			if (playByPlayDivRef.current) {
 				// Keep in sync with .live-game-affix
 				if (window.matchMedia("(min-width:768px)").matches) {
-					playByPlayDivRef.current.style.height = `${
-						window.innerHeight - 113
-					}px`;
+					// Was a hardcoded `window.innerHeight - 113`, which baked in the old fixed
+					// 52px navbar plus the title bar. Measure the element's real offset from the
+					// top of the viewport instead, so this tracks --zen-navbar-h and the user's
+					// chosen text scale.
+					const top = playByPlayDivRef.current.getBoundingClientRect().top;
+					playByPlayDivRef.current.style.height = `${Math.max(
+						240,
+						window.innerHeight - top - 8,
+					)}px`;
 				} else if (playByPlayDivRef.current.style.height !== "") {
 					playByPlayDivRef.current.style.removeProperty("height");
 				}

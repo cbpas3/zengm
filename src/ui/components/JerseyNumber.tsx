@@ -63,14 +63,16 @@ export const JerseyNumber = ({
 		? "4px double var(--bs-yellow)"
 		: `2px solid ${colors[2]}`;
 
-	let fontSize = 32;
+	// em rather than px so the whole jersey scales with the user's chosen text size. The ladder
+	// shrinks the digits as the number gets longer so it still fits the box.
+	let fontSize = "2em";
 	const numDigits = number.length;
 	if (numDigits === 3) {
-		fontSize = 26;
+		fontSize = "1.6em";
 	} else if (numDigits === 4) {
-		fontSize = 20;
+		fontSize = "1.25em";
 	} else if (numDigits > 4) {
-		fontSize = 17;
+		fontSize = "1.05em";
 	}
 
 	// On mobile, we show the jersey number popover on click, because there is no way to hover like on desktop. This means any onClick action (like toggling retirement) should happen only on subsequent clicks, while it's already open from the first click. That gets handled with onToggle, which fires before it opens, and gives us a chance to set preventNextClick.
@@ -95,8 +97,9 @@ export const JerseyNumber = ({
 					onClick ? "cursor-pointer" : undefined,
 				)}
 				style={{
-					width: 55,
-					height: 50,
+					// rem so the box grows with the digits it has to hold
+					width: "3.5rem",
+					height: "3.25rem",
 					border,
 					backgroundColor: colors[0],
 					color: colors[1],

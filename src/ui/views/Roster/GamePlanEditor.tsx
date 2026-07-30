@@ -163,7 +163,7 @@ const GamePlanSlider = ({
 			{executionLabel ? (
 				<span
 					className={`${EXECUTION_BADGE_CLASS[executionLabel]} ms-2`}
-					style={{ fontSize: "0.65rem" }}
+					style={{ fontSize: "var(--zen-fs-xs)" }}
 					title="How well your current roster can actually execute this dial"
 				>
 					{executionLabel} execution
@@ -186,7 +186,7 @@ const GamePlanSlider = ({
 			/>
 			<div
 				className="d-flex justify-content-between text-body-secondary"
-				style={{ fontSize: "0.75rem", marginTop: -4 }}
+				style={{ fontSize: "var(--zen-fs-sm)" }}
 			>
 				<span>{config.minLabel}</span>
 				<span className="fw-bold">{value}</span>
@@ -247,7 +247,7 @@ const GamePlanEditor = ({
 					>
 						<div
 							className="text-body-secondary text-uppercase fw-bold mb-1"
-							style={{ fontSize: "0.7rem" }}
+							style={{ fontSize: "var(--zen-fs-sm)" }}
 						>
 							Offense
 						</div>
@@ -262,7 +262,7 @@ const GamePlanEditor = ({
 						))}
 						<div
 							className="text-body-secondary text-uppercase fw-bold mb-1"
-							style={{ fontSize: "0.7rem" }}
+							style={{ fontSize: "var(--zen-fs-sm)" }}
 						>
 							Defense
 						</div>

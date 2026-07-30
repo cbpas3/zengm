@@ -466,7 +466,7 @@ export const ScoreBox = memo(
 														"pe-1": small,
 													},
 												)}
-												style={!small ? { fontSize: 16 } : undefined}
+												style={!small ? { fontSize: "var(--zen-fs-lg)" } : undefined}
 											>
 												{small ? (
 													<a

@@ -914,6 +914,167 @@ generated articles; dynasty/multi-season pieces) are specced in the plan doc, no
 
 ---
 
+## Feature 11: Mobile-First Large-Type Accessibility
+
+### What it does
+
+Rebuilds the whole UI mobile-first with large, high-contrast type and real touch targets, for a
+low-vision / reduced-motor-precision (elderly) user. Full spec and phase-by-phase plan in
+`MOBILE_FIRST_ACCESSIBILITY_PLAN.md`; that document is the working spec, not a historical record —
+keep it current when you change any of this.
+
+Headline changes: body text 13px → **18px default** with a user-selectable 16/18/21/24 scale, all
+typography driven from one token layer, every hardcoded navbar offset collapsed into a single CSS
+custom property, touch targets raised to 44/48px, and wide stat tables reflowed into a card layout
+on phones instead of scrolling sideways.
+
+### The token layer (`public/css/_tokens.scss`)
+
+Single source of truth for type scale (`--zen-fs-xs` … `--zen-fs-3xl`), line heights, touch-target
+sizes (`--zen-tap-min` 44px / `--zen-tap-primary` 48px), and chrome geometry
+(`--zen-navbar-h`, `--zen-sticky-top`, `--zen-bottom-bar-h`). `@import`ed from `light.scss` **after**
+the Bootstrap partials (it needs `media-breakpoint-up`, and its `html` rule must beat reboot) and
+before the app CSS. `dark.scss` `@import`s `light.scss`, so tokens cover both themes.
+
+**Why custom properties and not utility classes:** the production build runs PurgeCSS over
+`build/gen/*.js` and deletes any *class* selector not found literally in the emitted JS.
+`:root` / `[data-*]` / element selectors are not class-based and survive purging.
+
+### The scale mechanism
+
+`$font-size-base` went `0.8125rem` → **`1rem`**, so every rem Bootstrap emits is real, and the
+absolute size is set once via `html { font-size: <percent> }` keyed on a `data-font-scale` attribute.
+One attribute rescales the entire app with no per-component work.
+
+Percentages (not px) keep the user's own browser/OS font preference in the chain. The attribute is
+stamped on `<html>` by the **pre-paint inline script in `public/index.html`** (`getFontScale` /
+`applyFontScale`, exposed on `window` and declared in `types.ts`), mirroring the existing theme
+mechanism exactly, so there is no flash of the wrong size on load. Persisted in `localStorage` as a
+device preference — *not* a league/account option — and synced across tabs by the `storage` handler
+in `src/ui/index.tsx`. Exposed as "Text Size" in Global Settings.
+
+### Chrome geometry: the eight magic numbers
+
+The fixed navbar's height used to be duplicated as `52px`/`60px` in eight places, including an
+**inline style on `<body>` in `public/index.html`** and `window.innerHeight - 113` in JS. All of them
+now read `--zen-navbar-h` / `--zen-sticky-top`; the LiveGame play-by-play pane measures its own
+`getBoundingClientRect().top` instead. If you add anything that positions itself against the navbar,
+read the token — do not reintroduce a number.
+
+### DataTable mobile card mode
+
+64 of 123 view modules render `DataTable`, and `table { white-space: nowrap }` applies globally, so
+every stats page failed WCAG 1.4.10 (Reflow). Below `md`, `DataTable` now renders each row as a card
+(`DataTable/MobileCards.tsx`): primary column as a heading, then `label: value` pairs where the label
+is the column's **full `desc`** ("Total Rebounds"), not its abbreviation ("TRB"), with a "Show all N
+details" disclosure past the first 5 pairs. `DataTable/MobileControls.tsx` replaces
+tap-the-20px-header-arrow sorting with a full-width "Sort by" select plus a labelled direction
+toggle.
+
+- Controlled by `mobileCards?: false | "auto"` (default `"auto"`), `mobileCardPrimaryCol`,
+  `mobileCardVisiblePairs`. `Col.mobilePriority` orders the pairs; it defaults to display index, so
+  no `getCols.ts` change is needed for a table to behave sensibly.
+- It reuses `processRows`' already-processed rows, so filtering/sorting/pagination behave identically
+  to table mode — the data pipeline is not forked.
+- **Real DOM swap, not `display: block` on table elements** — block-ifying a table destroys the
+  row/column association in the accessibility tree and fights Bootstrap's `.table-*` classes.
+  Consequence: `useStickyXX` and `useStickyTableHeader` are meaningless in card mode and not rendered.
+- **Known limitation:** card mode is automatically off when `sortableRows` is set (Roster while
+  editable, Depth, ScheduleEditor, FantasyDraft, Draft), because drag-to-reorder is a table
+  interaction. Those keep their horizontally-scrolling table on mobile.
+
+### Hover-only information
+
+Column definitions lived only in `title={desc}` on the `<th>` — a native tooltip, unreachable on
+touch. Now: card labels *are* the full names; `DataTable/ColumnDefinitions.tsx` adds a tappable
+"What do these columns mean?" disclosure under the table for table mode; and `<th>` carries
+`aria-label` + `aria-sort`. `.small-scrollbar` also only widened on `:hover`, so `@media (hover: none)`
+gives touch devices a full-size scrollbar.
+
+### `useBreakpoint` replaces `window.mobile` for layout
+
+`window.mobile` (`public/index.html`) is computed **once** from `window.screen` — the device screen,
+not the viewport — and never updates on resize or rotation. `src/ui/hooks/useBreakpoint.ts`
+(`matchMedia` + `useSyncExternalStore`) is the replacement for anything layout-related. `window.mobile`
+stays for the ad code, which genuinely wants a device-class signal. 43 non-ad call sites remain, 28 of
+them the single `defaultStickyCols={window.mobile ? 0 : N}` pattern that card mode makes dead on
+mobile — migrate them opportunistically, don't big-bang it.
+
+### Mobile bottom action bar
+
+Play advances the whole simulation and sat at the top of the screen. Below `sm`, `.play-button-wrapper`
+becomes a fixed full-width bar at the bottom with `drop="up"` (set from the same breakpoint in
+`PlayMenu.tsx`), and `--zen-bottom-bar-h` keeps `body`'s bottom padding in step so it never covers
+content. Sits above the mobile leaderboard ad when that is present.
+
+### Contrast
+
+Dark mode's `$min-contrast-ratio` went 3 → 4.5, `$body-secondary-color` `$gray-400` → `$gray-500`;
+light mode's `.watch` and `.text-warning` were ~2:1 and were darkened. **Compiling emits 9
+informational `Found no color leading to 4.5:1` Sass warnings** — all hover/active tints of the dark
+theme's secondary/danger/god-mode buttons, which land ~3.2–4.4:1 (above the 3:1 UI threshold, below
+the target, and only while hovered/pressed). Fixing them means redesigning that palette, which is out
+of scope for a legibility pass; see the comment at the `$min-contrast-ratio` line for detail. Do not
+"fix" the warnings by lowering the ratio back.
+
+### Audit harness (`tools/a11y/`)
+
+"Every page" is ~190 routes over 123 view modules, so progress is measured, not asserted.
+
+| Command | What it does |
+| ------- | ------------ |
+| `node tools/a11y/audit.ts --baseline` | Full matrix, writes `out/baseline.json` |
+| `node tools/a11y/audit.ts --quick` | One viewport + default scale, for iteration |
+| `node tools/a11y/audit.ts --routes=roster,playerStats` | Subset |
+| `node tools/a11y/audit.ts --screenshots` | Also save a PNG per page |
+| `node tools/a11y/checkCss.ts` | Compile `light`/`dark` SCSS only — seconds, not minutes |
+
+`audit.ts` serves `build/` (so it exercises the **production** CSS, PurgeCSS included), bootstraps a
+league once into a persistent browser profile (`tools/a11y/.profile`, reused across runs; `--fresh`
+discards it), scrapes concrete route params into `out/fixture.json`, then asserts per page: no
+horizontal document overflow, no text under 14px, no interactive element under 24×24 (hard) / 44×44
+(target), nothing hidden under the navbar, and no axe-core violations. `checks.ts` holds the
+thresholds and the in-page assertions; `routes.ts` is the page inventory grouped by archetype.
+
+**Gotchas:**
+- The sandbox's preinstalled Chromium predates the pinned `playwright`'s expected build, so the
+  harness launches `/opt/pw-browsers/chromium` explicitly (`A11Y_CHROMIUM` overrides). Never run
+  `playwright install`.
+- `axe-core` is a new devDependency, injected from `node_modules` — external hosts are blocked.
+- `pnpm run dev` wipes `build/`, so do not start it while an audit is running against that build.
+
+### Key files
+
+| File | Role |
+| ---- | ---- |
+| `MOBILE_FIRST_ACCESSIBILITY_PLAN.md` | The spec: design targets, per-file inventory, phases, anti-goals |
+| `public/css/_tokens.scss` | Token layer, root scale, reduced-motion, focus ring, form-control floors |
+| `public/css/light.scss` | `$font-size-base: 1rem`, heading/control sizing vars, chrome geometry, all the de-hardcoded rules |
+| `public/css/dark.scss` | Contrast: `$min-contrast-ratio`, `$body-secondary-color` |
+| `public/css/datatable.scss` | Card-mode + column-definition CSS; search box now full-width on mobile |
+| `public/css/sidebar.scss` | Drawer sizing, 48px nav links, wrapping labels |
+| `public/index.html` | Pre-paint `getFontScale`/`applyFontScale`; body padding moved to CSS |
+| `src/ui/hooks/useBreakpoint.ts` | `useBreakpointUp`/`useBreakpointDown` |
+| `src/ui/components/DataTable/MobileCards.tsx` | Card layout |
+| `src/ui/components/DataTable/MobileControls.tsx` | Mobile sort + search |
+| `src/ui/components/DataTable/ColumnDefinitions.tsx` | Tappable column meanings |
+| `src/ui/components/DataTable/index.tsx` | `mobileCards` props, card/table swap, `Col.mobilePriority` |
+| `src/ui/components/PlayMenu.tsx` | Bottom-bar Play, `drop="up"` below sm |
+| `src/ui/views/GlobalSettings/index.tsx` | "Text Size" setting |
+| `src/ui/index.tsx` | Cross-tab `fontScale` sync |
+| `src/common/types.ts` | `FontScale`, `window.getFontScale`/`applyFontScale` |
+| `tools/a11y/*` | Audit harness (`audit.ts`, `checks.ts`, `routes.ts`, `checkCss.ts`) |
+
+### Pre-existing condition worth knowing
+
+`pnpm run lint` (`tsc`) reports **28 errors on `master`**, all in this fork's own feature code —
+`TradingBlock/index.tsx`, `SavedTrades.tsx`, `TradeProposals.tsx`,
+`Roster/PlayerDevelopmentControls.tsx`, `worker/core/player/developSeason.ts`. They predate this work
+and are untouched by it. Also note `engines.node` is `^24` while this environment runs Node 22; the
+build works, with an `Unsupported engine` warning.
+
+---
+
 ## Deployment (Vercel)
 
 - Hosted at **https://basketballgm.vercel.app** — Vercel project **`basketballgm`**, scope

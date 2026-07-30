@@ -127,7 +127,7 @@ const Controls = ({
 					id={`datatable-controls-${name}`}
 					style={{
 						cursor: "pointer",
-						fontSize: 16,
+						fontSize: "var(--zen-fs-lg)",
 						lineHeight: "30px",
 						padding: "0 0 0 5px",
 					}}

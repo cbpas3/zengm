@@ -61,7 +61,7 @@ const PlayerDevelopmentControls = ({
 		<div className="d-flex flex-column gap-1" style={{ minWidth: 130 }}>
 			<label
 				className="d-flex align-items-center gap-1 mb-0"
-				style={{ fontSize: "0.8rem", cursor: "pointer" }}
+				style={{ fontSize: "var(--zen-fs-body)", cursor: "pointer" }}
 			>
 				<input
 					type="checkbox"
@@ -152,7 +152,7 @@ const PlayerDevelopmentControls = ({
 					return (
 						<span
 							style={{
-								fontSize: "0.7rem",
+								fontSize: "var(--zen-fs-sm)",
 								padding: "1px 6px",
 								borderRadius: 4,
 								background: s.bg,
@@ -191,7 +191,7 @@ const PlayerDevelopmentControls = ({
 					return (
 						<span
 							style={{
-								fontSize: "0.7rem",
+								fontSize: "var(--zen-fs-sm)",
 								padding: "1px 6px",
 								borderRadius: 4,
 								background: s.bg,

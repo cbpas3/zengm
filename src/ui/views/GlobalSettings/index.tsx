@@ -40,7 +40,11 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 
 		const fullNames = props.fullNames ? "always" : ("abbrev-small" as const);
 
+		// A device preference stored in localStorage, like theme - not a league/account option
+		const fontScale = window.getFontScale();
+
 		return {
+			fontScale,
 			fullNames,
 			openRouterApiKey: props.openRouterApiKey ?? "",
 			phaseChangeRedirects: props.phaseChangeRedirects,
@@ -75,6 +79,14 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 		if (window.themeCSSLink) {
 			window.themeCSSLink.href = window.getThemeFilename(window.getTheme());
 		}
+
+		if (state.fontScale === "default") {
+			safeLocalStorage.removeItem("fontScale");
+		} else {
+			safeLocalStorage.setItem("fontScale", state.fontScale);
+		}
+		// Apply immediately - a text-size change the user can't see until they reload is useless
+		window.applyFontScale(state.fontScale);
 
 		const units = state.units === "default" ? undefined : state.units;
 		try {
@@ -127,6 +139,24 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 
 			<form onSubmit={handleFormSubmit}>
 				<div className="row">
+					<div className="col-sm-3 col-6 mb-3">
+						<label className="form-label" htmlFor="options-font-scale">
+							Text Size
+						</label>
+						<select
+							id="options-font-scale"
+							className="form-select"
+							onChange={handleChange("fontScale")}
+							value={state.fontScale}
+						>
+							{/* Plain-language labels with the actual sizes, since "112.5%" means
+							    nothing to the person who needs this setting */}
+							<option value="compact">Standard (16px)</option>
+							<option value="default">Large (18px) — recommended</option>
+							<option value="large">Larger (21px)</option>
+							<option value="xlarge">Largest (24px)</option>
+						</select>
+					</div>
 					<div className="col-sm-3 col-6 mb-3">
 						<label className="form-label" htmlFor="options-color-scheme">
 							Color Scheme

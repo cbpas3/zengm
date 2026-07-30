@@ -25,12 +25,59 @@ $grid-gutter-width: 1rem; // Needs to decrease too, or it overflows
 .form-check-inline {
 	margin-right: 0.75rem !important;
 }
+// Was 1.75rem x 1rem - far below the tap floor, on a page that is almost entirely toggles.
 .form-switch .form-check-input {
-	width: 1.75rem !important;
-	height: 1rem !important;
+	width: 3rem !important;
+	height: 1.5rem !important;
+	margin-top: 0.1rem;
 }
 
-$font-size-base: 0.8125rem;
+// Accessibility: was 0.8125rem (13px). The app is now scaled from the root font size instead
+// (see _tokens.scss), so this must be a plain 1rem for every rem Bootstrap emits to be real.
+// MOBILE_FIRST_ACCESSIBILITY_PLAN.md §3.1.
+$font-size-base: 1rem;
+
+// Heading scale. Keep these in sync with the --zen-fs-* tokens in _tokens.scss; they can't
+// reference the custom properties directly because Sass needs literal values at build time.
+// Deliberately much flatter than Bootstrap's default 2.5x/2x/1.75x ramp: at an 18-24px base a
+// 2.5x h1 is enormous on a 360px screen, and the app puts an h1 in the title bar of every page.
+$h1-font-size: 1.75rem;
+$h2-font-size: 1.5rem;
+$h3-font-size: 1.25rem;
+$h4-font-size: 1.125rem;
+$h5-font-size: 1rem;
+$h6-font-size: 1rem;
+$line-height-base: 1.5; // WCAG 1.4.12
+$headings-line-height: 1.25;
+
+// ---- Control sizing (WCAG 2.5.5 / 2.5.8) -----------------------------------------------------
+// Buttons, inputs and selects all derive their height from these. Sized so the default (non-sm)
+// variants clear 44px at the 16px compact scale and grow from there.
+// MOBILE_FIRST_ACCESSIBILITY_PLAN.md §3.3.
+$input-btn-padding-y: 0.5rem;
+$input-btn-padding-x: 0.875rem;
+$input-btn-padding-y-sm: 0.375rem;
+$input-btn-padding-x-sm: 0.625rem;
+$input-btn-font-size-sm: 0.9375rem; // never below 15px, so iOS Safari doesn't zoom on focus
+$input-btn-focus-width: 0.25rem;
+
+// Table cells: the old table-sm padding produced ~30px rows, below the tap floor for the many
+// tables whose rows contain links and buttons.
+$table-cell-padding-y: 0.5rem;
+$table-cell-padding-x: 0.5rem;
+$table-cell-padding-y-sm: 0.4rem;
+$table-cell-padding-x-sm: 0.4rem;
+
+// Dropdown items are tap targets in the Play menu and every nav dropdown
+$dropdown-item-padding-y: 0.5rem;
+$dropdown-item-padding-x: 1rem;
+
+$pagination-padding-y: 0.5rem;
+$pagination-padding-x: 0.875rem;
+
+$nav-link-padding-y: 0.5rem;
+$nav-link-padding-x: 0.75rem;
+
 $black: #000 !default;
 
 // Taken from Bootstrap 4, for consistency
@@ -123,10 +170,29 @@ $flag-icon-css-path: "/img/flags";
 @import "node_modules/bootstrap/scss/helpers";
 @import "node_modules/bootstrap/scss/utilities/api";
 
+// Must come after Bootstrap's mixins (media-breakpoint-up) and after reboot, so the root scale
+// wins. See MOBILE_FIRST_ACCESSIBILITY_PLAN.md §4.1.
+@import "tokens";
+
 @import "datatable";
 @import "bbgm-notifications";
 @import "glyphicons";
 @import "sidebar";
+
+// ---- Chrome geometry -------------------------------------------------------------------------
+// The fixed navbar's height used to be duplicated as a magic 52px/60px in eight places, including
+// an inline style on <body> in public/index.html. Everything now reads --zen-navbar-h so the navbar
+// can grow with the text scale without content sliding underneath it.
+// MOBILE_FIRST_ACCESSIBILITY_PLAN.md §1.6.
+body {
+	padding-top: var(--zen-navbar-h);
+	// Room for the fixed bottom action bar on small screens
+	padding-bottom: var(--zen-bottom-bar-h);
+}
+
+.navbar.fixed-top {
+	min-height: var(--zen-navbar-h);
+}
 
 @each $color, $value in $table-variants {
 	.table-#{$color} {
@@ -139,23 +205,11 @@ $flag-icon-css-path: "/img/flags";
 	}
 }
 
-h1 {
-	font-size: 24px;
-}
-h2 {
-	font-size: 20px;
-}
-h3 {
-	font-size: 16px;
-}
-h4 {
-	font-size: 14px;
-}
-h5 {
-	font-size: 12px;
-}
+// Headings come from $h1-font-size..$h6-font-size (set above, in sync with --zen-fs-*). The old
+// hardcoded 24/20/16/14/12px overrides lived here and did not scale with the root font size.
 .modal-title {
-	font-size: 20px;
+	font-size: var(--zen-fs-2xl);
+	line-height: var(--zen-lh-tight);
 }
 
 @media screen and (min-width: (map-get($grid-breakpoints, xl) + 190px)) {
@@ -164,7 +218,7 @@ h5 {
 	#zen-gm_right_rail {
 		display: block;
 		position: sticky;
-		top: 60px;
+		top: var(--zen-sticky-top);
 		right: 0;
 		width: 160px;
 		height: 600px;
@@ -172,8 +226,10 @@ h5 {
 }
 
 .navbar-brand {
-	// Not sure why, but without this it's 35.5px which screws up alignment of the dropdowns and the border
-	height: 35px;
+	// Was a fixed 35px, which clipped the wordmark once the text scale grew.
+	min-height: 2.25rem;
+	display: inline-flex;
+	align-items: center;
 
 	img {
 		vertical-align: -3px;
@@ -234,10 +290,13 @@ a.god-mode.active {
 }
 
 .play-button {
-	font-size: 1.01562rem;
-	padding: 14px !important;
+	font-size: var(--zen-fs-lg);
+	padding: 0.75rem 1rem !important;
 	color: #fff !important; // white in light and dark
-	height: 51px;
+	min-height: var(--zen-tap-primary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 .play-button-success {
 	background-color: $green;
@@ -279,25 +338,25 @@ a.god-mode.active {
 }
 
 .dashboard-top-link {
-	line-height: 1.35;
-	padding: 5px 8px 6px;
+	line-height: var(--zen-lh-body);
+	padding: 0.5rem 0.625rem;
 	text-align: left;
-	width: 155px;
-	height: 77px;
+	min-width: 11rem;
+	min-height: 5.5rem;
 }
 
 .dashboard-top-link-new {
-	font-size: 20px;
-	padding-top: 11px;
+	font-size: var(--zen-fs-2xl);
+	padding-top: 0.5rem;
 }
 
 .dashboard-top-link-small {
-	font-size: 16px;
+	font-size: var(--zen-fs-xl);
 }
 
 .dashboard-top-link-other {
 	color: $gray-800;
-	font-size: 15px;
+	font-size: var(--zen-fs-lg);
 	background-repeat: no-repeat;
 	padding-right: 20px;
 	padding-top: 7px;
@@ -330,7 +389,8 @@ a.god-mode.active {
 	}
 
 	a.dashboard-top-link-flatten {
-		width: 326px;
+		width: 100%;
+		max-width: 24rem;
 		height: inherit;
 
 		br {
@@ -371,16 +431,16 @@ a.god-mode.active {
 }
 
 .negotiation-team-years {
-	width: 110px;
+	min-width: 7rem;
 }
 
 .negotiation-team-amount {
-	width: 180px;
+	min-width: 11rem;
 }
 
 .help-icon {
 	cursor: pointer;
-	font-size: 13px;
+	font-size: var(--zen-fs-lg);
 }
 
 table {
@@ -472,9 +532,9 @@ table {
 
 .skill {
 	cursor: default;
-	font-size: 10px;
-	line-height: 18px;
-	margin-left: 4px;
+	font-size: var(--zen-fs-xs);
+	line-height: 1.4;
+	margin-left: 0.25rem;
 	vertical-align: 2%;
 }
 
@@ -483,10 +543,10 @@ table {
 	vertical-align: 2%;
 }
 
-$jersey-number-width: 15px;
+$jersey-number-width: 1.25rem;
 .jersey-number-name {
-	font-size: 10px;
-	line-height: 18px;
+	font-size: var(--zen-fs-xs);
+	line-height: 1.4;
 	vertical-align: 2%;
 	display: inline-block;
 	min-width: $jersey-number-width;
@@ -497,13 +557,15 @@ $jersey-number-width: 15px;
 }
 
 .jersey-number-popover {
-	font-size: 10px;
-	line-height: 16px;
+	font-size: var(--zen-fs-sm);
+	line-height: 1.4;
 }
 
+// Was $gray-500, about 2:1 on white — invisible to the target audience. $gray-700 is ~5.7:1 and
+// still reads as "off" next to the filled-in state.
 .watch,
 .watch:hover {
-	color: $gray-500;
+	color: $gray-700;
 	cursor: pointer;
 	margin-left: 4px;
 	text-decoration: none;
@@ -622,7 +684,7 @@ $jersey-number-width: 15px;
 
 // Stupid fix for popover in h4
 .popover-body {
-	font-size: 13px;
+	font-size: var(--zen-fs-body);
 	font-weight: normal;
 
 	p:last-child {
@@ -645,18 +707,20 @@ $jersey-number-width: 15px;
 
 		a {
 			color: $black;
-			display: block;
-			padding: 4px 5px;
+			display: flex;
+			align-items: center;
+			min-height: var(--zen-tap-min);
+			padding: 0.5rem 0.625rem;
 			text-decoration: none;
 		}
 	}
 
 	.year {
-		width: 40px;
+		width: 6ch;
 	}
 
 	.from {
-		width: 130px;
+		width: 16ch;
 	}
 
 	.text {
@@ -698,7 +762,7 @@ tr.table-warning:hover > td {
 	.live-game-affix {
 		position: sticky;
 		margin-top: 0;
-		top: 52px;
+		top: var(--zen-sticky-top);
 	}
 	.live-game-playbyplay {
 		overflow: auto;
@@ -706,7 +770,7 @@ tr.table-warning:hover > td {
 }
 .live-game-sticky {
 	position: sticky;
-	top: 52px;
+	top: var(--zen-sticky-top);
 
 	// Puts it over sticky column headers
 	z-index: 1;
@@ -716,7 +780,7 @@ tr.table-warning:hover > td {
 @include media-breakpoint-up(md) {
 	.trade-affix {
 		position: sticky;
-		top: 60px;
+		top: var(--zen-sticky-top);
 	}
 	.trade-items {
 		overflow: auto;
@@ -746,11 +810,14 @@ tr.table-warning:hover > td {
 	user-select: none;
 }
 
+// Was padding 3px / line-height 0.9, giving an ~18px-tall control. Kept as a class (it has many
+// call sites) but sized to the tap floor. line-height 0.9 also broke WCAG 1.4.12.
 .btn-xs {
-	padding: 3px 0.4rem;
+	padding: 0.25rem 0.5rem;
 	font-size: $btn-font-size-sm;
-	line-height: 0.9;
-	border-radius: 0.2rem;
+	line-height: var(--zen-lh-body);
+	min-height: var(--zen-tap-min);
+	border-radius: 0.25rem;
 }
 
 // Not sure why these need more than 2 args to button-variant, but otherwise hover seems broken
@@ -777,11 +844,58 @@ tr.table-warning:hover > td {
 	border-bottom: 1px solid $gray-200;
 }
 
+// These used to be a fixed 51px to line up with the old 52px navbar. min-height lets them track
+// --zen-navbar-h instead.
 .dropdown-links .nav-item,
 #top-user-block .nav-item,
 .play-button-wrapper {
-	margin: -8px 0;
-	height: 51px;
+	display: flex;
+	align-items: stretch;
+	min-height: var(--zen-tap-primary);
+}
+
+// ---- Mobile bottom action bar ----------------------------------------------------------------
+// Play is the control that advances the whole game, and in the navbar it sits at the top of the
+// screen - the hardest place to reach one-handed on a phone. Below sm it becomes a full-width fixed
+// bar at the bottom, with its menu opening upward (PlayMenu.tsx sets drop="up" at the same
+// breakpoint). MOBILE_FIRST_ACCESSIBILITY_PLAN.md §4.4.
+@include media-breakpoint-down(sm) {
+	:root {
+		// Keeps body padding-bottom in step so the bar never covers the last row of content
+		--zen-bottom-bar-h: calc(var(--zen-tap-primary) + 0.5rem);
+	}
+
+	.play-button-wrapper {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		z-index: 1035; // Under the sidebar (1040), over page content
+		padding: 0.25rem 0.5rem;
+		background-color: $body-bg;
+		border-top: 1px solid $border-color;
+
+		.play-button {
+			width: 100%;
+			border-radius: 0.375rem;
+		}
+
+		// Popper positions the menu; make it span the bar so the targets are full width
+		.dropdown-menu {
+			width: calc(100vw - 1rem);
+			max-height: 70vh;
+			overflow-y: auto;
+		}
+	}
+
+	// When the mobile leaderboard ad is showing, sit above it rather than under it
+	body:has(#basketball-gm_mobile_leaderboard, #football-gm_mobile_leaderboard, #zen-gm_mobile_leaderboard) {
+		--zen-bottom-bar-h: calc(var(--zen-tap-primary) + 3.75rem);
+
+		.play-button-wrapper {
+			bottom: 52px; // Keep in sync with MOBILE_AD_BOTTOM_MARGIN in src/common/constants.ts
+		}
+	}
 }
 .dropdown-mobile {
 	.dropdown-item {
@@ -796,20 +910,26 @@ tr.table-warning:hover > td {
 	background-color: $gray-200;
 }
 .dropdown-links .nav-link {
-	padding: 16px 8px;
+	display: flex;
+	align-items: center;
+	min-height: var(--zen-tap-primary);
+	padding: 0.5rem 0.625rem;
 }
 @include media-breakpoint-up(xl) {
 	.dropdown-links .nav-link {
-		padding: 16px;
+		padding: 0.5rem 1rem;
 	}
 }
 
 #top-user-block .nav-link {
-	padding: 16px 0 16px 8px;
+	display: flex;
+	align-items: center;
+	min-height: var(--zen-tap-primary);
+	padding: 0.5rem 0.625rem;
 }
 @include media-breakpoint-up(xl) {
 	#top-user-block .nav-link {
-		padding: 16px 0 16px 16px;
+		padding: 0.5rem 1rem;
 	}
 }
 
@@ -833,11 +953,11 @@ tr.table-warning:hover > td {
 }
 
 .legend-square {
-	bottom: -2.5px;
+	bottom: -0.15em;
 	display: inline-block;
-	height: 15px;
+	height: 1em;
 	position: relative;
-	width: 15px;
+	width: 1em;
 }
 
 // https://github.com/twbs/bootstrap/issues/27493
@@ -864,7 +984,7 @@ tr.table-warning:hover > td {
 }
 
 .table tr {
-	min-height: 30px;
+	min-height: var(--zen-tap-min);
 }
 
 .table-responsive {
@@ -894,10 +1014,15 @@ tr.table-warning:hover > td {
 	margin: 0;
 	padding: 0;
 	text-indent: 0;
-	max-width: 200px;
+	// Was a hard 200px cap, which clipped team names at larger text scales
+	max-width: 100%;
+
+	@include media-breakpoint-up(md) {
+		max-width: 16rem;
+	}
 
 	li {
-		height: 40px;
+		min-height: var(--zen-tap-min);
 		display: flex;
 		align-items: center;
 	}
@@ -969,18 +1094,18 @@ tr.table-warning:hover > td {
 
 .title-bar {
 	gap: 0 10px;
-	min-height: 32px;
+	min-height: var(--zen-tap-min);
 
 	// Like .container-fluid
 	padding-left: var(--bs-gutter-x, 0.5rem);
 	padding-right: var(--bs-gutter-x, 0.5rem);
 
 	h1 {
-		font-size: 20px;
+		font-size: var(--zen-fs-2xl);
 		margin-bottom: 7px; // Needed in addition to .title-bar min-height when it wraps onto multiple lines
 	}
 	option {
-		font-size: 12px;
+		font-size: var(--zen-fs-body);
 	}
 	.dropdown-links .dropdown.show.nav-item {
 		background-color: $gray-100;
@@ -988,14 +1113,14 @@ tr.table-warning:hover > td {
 }
 .title-bar-right-links {
 	.nav-item {
-		height: 39px !important;
+		min-height: var(--zen-tap-min) !important;
 	}
 	.nav-link {
-		padding-bottom: 10px !important;
-		padding-top: 6px !important;
-	}
-	.dropdown-menu {
-		margin-top: -5px !important;
+		display: flex;
+		align-items: center;
+		min-height: var(--zen-tap-min);
+		padding-top: 0.25rem !important;
+		padding-bottom: 0.25rem !important;
 	}
 }
 
@@ -1013,7 +1138,9 @@ tr.table-warning:hover > td {
 	-moz-appearance: none;
 	-webkit-appearance: none;
 	appearance: none;
-	padding: 1px 13px 0 2px;
+	// Was `padding: 1px 13px 0 2px` - a ~16px-tall control, and one of the most-used in the game
+	min-height: var(--zen-tap-min);
+	padding: 0.25rem 1rem 0.25rem 0.25rem;
 	background-color: inherit;
 	border: 0;
 	color: inherit;
@@ -1027,7 +1154,7 @@ tr.table-warning:hover > td {
 	background-size:
 		0.62em auto,
 		100%;
-	font-size: 13px;
+	font-size: var(--zen-fs-lg);
 
 	option {
 		color: #000;
@@ -1035,24 +1162,17 @@ tr.table-warning:hover > td {
 }
 @include media-breakpoint-up(md) {
 	.dropdown-select {
-		font-size: 14px;
+		font-size: var(--zen-fs-lg);
 	}
 	.title-bar {
-		min-height: 38px;
+		min-height: calc(var(--zen-tap-min) + 0.25rem);
 		h1 {
-			font-size: 24px;
+			font-size: var(--zen-fs-3xl);
 		}
 	}
 	.title-bar-right-links {
 		.nav-item {
-			height: 38px !important;
-		}
-		.nav-link {
-			padding-bottom: 13px !important;
-			padding-top: 6px !important;
-		}
-		.dropdown-menu {
-			margin-top: -5px !important;
+			min-height: var(--zen-tap-min) !important;
 		}
 	}
 }
@@ -1061,8 +1181,8 @@ $league-top-bar-toggle-width: 15px;
 .league-top-bar {
 	padding-right: $league-top-bar-toggle-width;
 
-	// For scrollbar that grows on hover
-	height: 63px;
+	// Was a fixed 63px sized to 13px text. min-height lets the score boxes grow with the scale.
+	min-height: 4.5rem;
 	@include media-breakpoint-up(sm) {
 		&::-webkit-scrollbar {
 			height: 0 !important;
@@ -1076,7 +1196,7 @@ $league-top-bar-toggle-width: 15px;
 	border-top-right-radius: 0 !important;
 	border-bottom-right-radius: 0 !important;
 	width: $league-top-bar-toggle-width;
-	height: 56px;
+	min-height: 3.5rem;
 	z-index: 1000;
 	position: absolute;
 	right: 0px;
@@ -1085,6 +1205,15 @@ $league-top-bar-toggle-width: 15px;
 $small-scrollbar-track-color: $gray-300 !default;
 $small-scrollbar-thumb-color: $gray-500 !default;
 $small-scrollbar-thumb-hover-color: darken($gray-500, 10%) !default;
+// Only applied from sm up, and only widened on :hover — which on a touch screen means it never
+// widens at all. Any device without hover gets a full-size, always-visible scrollbar instead, so a
+// horizontally-scrollable region is discoverable without a mouse.
+@media (hover: none) {
+	.small-scrollbar {
+		scrollbar-width: auto;
+	}
+}
+
 @include media-breakpoint-up(sm) {
 	.small-scrollbar {
 		// Firefox
@@ -1119,22 +1248,22 @@ $small-scrollbar-thumb-hover-color: darken($gray-500, 10%) !default;
 }
 
 .score-box-deadline {
-	height: 94px;
+	min-height: 6rem;
 }
 .score-box-deadline-small {
-	height: 54px;
+	min-height: 3.5rem;
 }
 
 .score-box-all-star {
-	height: 47px;
+	min-height: 3rem;
 }
 
 .score-box-score {
-	min-width: 44px;
+	min-width: 3ch;
 }
 
 .score-box-action {
-	height: 96px;
+	min-height: 6rem;
 
 	.btn {
 		border-bottom-left-radius: 0px !important;
@@ -1162,13 +1291,17 @@ $small-scrollbar-thumb-hover-color: darken($gray-500, 10%) !default;
 	border-color: $gray-300 !important;
 }
 
+// The old `margin-top: 3px` was a hack for the 13px $font-size-base. With a 1rem base Bootstrap's
+// own em-based alignment is correct, and the box itself needs to be big enough to hit.
 .form-check-input {
-	// Default does not do well with altered font-size-base
-	margin-top: 3px;
+	width: 1.25em;
+	height: 1.25em;
+	margin-top: 0.15em;
 }
 
+// darken($yellow, 10%) is roughly 2:1 on white. Warning text has to be readable, not just yellow.
 .text-warning {
-	color: darken($yellow, 10%) !important;
+	color: darken($yellow, 30%) !important;
 }
 
 .badge-news {
@@ -1258,7 +1391,8 @@ button.fast-forward {
 
 @include media-breakpoint-up(sm) {
 	.player-bio {
-		min-width: 370px;
+		min-width: 24rem;
+		max-width: 100%;
 		margin-right: 1em;
 	}
 }
@@ -1336,7 +1470,7 @@ button.fast-forward {
 a.anchor {
 	display: block;
 	position: relative;
-	top: -60px;
+	top: calc(-1 * var(--zen-sticky-top));
 	visibility: hidden;
 }
 
@@ -1357,7 +1491,7 @@ a.anchor {
 	.settings-shortcuts {
 		align-self: flex-start;
 		position: sticky;
-		top: 60px;
+		top: var(--zen-sticky-top);
 		margin-left: 1rem;
 
 		li {
@@ -1436,7 +1570,7 @@ a.anchor {
 
 @include media-breakpoint-up(sm) {
 	.play-through-injuries {
-		width: 200px;
+		width: 13rem;
 	}
 }
 
@@ -1487,7 +1621,7 @@ hr {
 	}
 
 	.dark-select__group-heading {
-		font-size: 90%;
+		font-size: var(--zen-fs-sm);
 	}
 
 	.dark-select__menu {
@@ -1497,7 +1631,7 @@ hr {
 
 // Make same height as other form controls
 .dark-select__control {
-	min-height: 33px !important;
+	min-height: var(--zen-tap-min) !important;
 }
 .dark-select__indicator {
 	padding: 0 8px !important;
@@ -1630,13 +1764,14 @@ table.sticky-iv {
 }
 
 .standings-name {
-	min-width: 100px;
+	// ch units track the font, so this stays "about N characters wide" at every text scale
+	min-width: 7ch;
 }
 
 @include media-breakpoint-up(sm) {
 	.standings-name {
 		// Wide enough that Philadelphia Cheesesteaks still fits after clinching playoffs
-		min-width: 228px;
+		min-width: 26ch;
 	}
 }
 
@@ -1672,9 +1807,9 @@ tr.text-body-secondary {
 }
 
 .compare-players-heading {
-	font-size: 0.75rem;
+	font-size: var(--zen-fs-sm);
 	text-transform: uppercase;
-	padding: 4px;
+	padding: 0.375rem 0.25rem;
 	cursor: pointer;
 
 	display: block;
@@ -1744,5 +1879,30 @@ tr.text-body-secondary {
 		background-color: $bg-secondary-very-subtle;
 		border: $border-width $border-style $border-color;
 		border-top: 0;
+	}
+}
+
+// ---- Charts ------------------------------------------------------------------------------------
+// The visx charts set their text sizes in `em`, so they inherit the root scale automatically. What
+// doesn't scale is line weight: a 1-2px stroke next to 24px type is effectively invisible, and the
+// legend was positioned as a cramped absolute overlay. MOBILE_FIRST_ACCESSIBILITY_PLAN.md §13.
+.chart-line {
+	stroke-width: 0.15em;
+}
+
+.chart-axis {
+	line,
+	path {
+		stroke-width: 1.5px;
+	}
+}
+
+// Was absolutely positioned over the plot at a fixed top/left, which at large text sizes covers
+// the data. Below md it becomes a normal block under the chart instead.
+@include media-breakpoint-down(md) {
+	.chart-legend {
+		position: static;
+		background-color: transparent;
+		margin-top: 0.5rem;
 	}
 }

@@ -42,6 +42,9 @@ const handleVersion = async () => {
 			if (window.themeCSSLink) {
 				window.themeCSSLink.href = window.getThemeFilename(window.getTheme());
 			}
+		} else if (e.key === "fontScale") {
+			// Follow the text size across tabs and popup windows, same as the theme above
+			window.applyFontScale(window.getFontScale());
 		}
 	});
 	analyticsEvent("app_version", {

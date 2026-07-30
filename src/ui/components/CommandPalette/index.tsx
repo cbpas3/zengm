@@ -924,7 +924,7 @@ const CommandPaletteInner = ({
 							type="text"
 							placeholder={`Search ${mode?.description ?? "pages"}...`}
 							style={{
-								fontSize: 15,
+								fontSize: "var(--zen-fs-body)",
 							}}
 							value={searchTextInput}
 							onChange={(event) => {

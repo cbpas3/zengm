@@ -41,6 +41,10 @@ import { DataTableContext } from "./contexts.ts";
 import { useStickyTableHeader } from "./useStickyTableHeader.ts";
 import { downloadFile } from "../../util/downloadFile.ts";
 import { safeLocalStorage } from "../../util/safeLocalStorage.ts";
+import { MobileCards } from "./MobileCards.tsx";
+import { MobileControls } from "./MobileControls.tsx";
+import { useBreakpointUp } from "../../hooks/useBreakpoint.ts";
+import { ColumnDefinitions } from "./ColumnDefinitions.tsx";
 
 export type SortBy = [number, SortOrder];
 
@@ -54,6 +58,11 @@ export type Col = {
 	title: string;
 	titleReact?: ReactNode;
 	width?: string;
+
+	// Lower = more important. Used only by the mobile card layout (MobileCards.tsx) to decide which
+	// columns show before the "Show all N" disclosure. Defaults to the column's display index, so a
+	// table that sets nothing still gets a sensible order.
+	mobilePriority?: number;
 };
 
 export type SuperCol = {
@@ -148,6 +157,17 @@ export type Props = {
 	superCols?: SuperCol[];
 	title?: ReactNode;
 
+	// Below `md`, render each row as a card instead of a table row, so wide stat tables reflow
+	// instead of scrolling sideways (WCAG 1.4.10). "auto" is the default; pass false for tables
+	// where a card per row makes no sense (a bracket, a 2-column key/value table that already
+	// fits). Automatically disabled when `sortableRows` is set — drag-to-reorder is a table
+	// interaction. See MOBILE_FIRST_ACCESSIBILITY_PLAN.md §4.3.
+	mobileCards?: false | "auto";
+	// Which visible column is the card's heading. Defaults to the first non-rank column.
+	mobileCardPrimaryCol?: number;
+	// How many label/value pairs to show before the "Show all" disclosure.
+	mobileCardVisiblePairs?: number;
+
 	// Pass this to control selectedRows from outside of this component (like if you want to have a button external to the table that does something with selected players). Otherwise, leave this undefined.
 	controlledSelectedRows?: SelectedRows;
 	alwaysShowBulkSelectRows?: boolean; // Often used along with controlledSelectedRows,
@@ -170,6 +190,9 @@ export const DataTable = ({
 	hideAllControls,
 	hideHeader,
 	hideMenuToo,
+	mobileCards = "auto",
+	mobileCardPrimaryCol,
+	mobileCardVisiblePairs,
 	name,
 	nonfluid,
 	pagination,
@@ -410,6 +433,41 @@ export const DataTable = ({
 		({ hidden, colIndex }) => !hidden && cols[colIndex],
 	);
 
+	// ---- Mobile card layout ----------------------------------------------------------------
+	// processedRows[].data is already reordered to match colOrderFiltered, so the card layout needs
+	// the same narrowed, display-ordered col list for its indices to line up.
+	const mdUp = useBreakpointUp("md");
+	const useCards = mobileCards !== false && !mdUp && !sortableRows;
+	const visibleCols = colOrderFiltered.map(({ colIndex }) => cols[colIndex]!);
+
+	// Default card heading: the first visible column that isn't the rank number, since "1" is not a
+	// useful title for a card.
+	let cardPrimaryIndex = mobileCardPrimaryCol;
+	if (cardPrimaryIndex === undefined) {
+		const firstNonRank = colOrderFiltered.findIndex(
+			({ colIndex }) => colIndex !== rankCol,
+		);
+		cardPrimaryIndex = firstNonRank === -1 ? 0 : firstNonRank;
+	}
+
+	// Columns the mobile sort control offers: sortable ones only, expressed as indices into `cols`
+	// so they can be handed straight to the same sort state the table uses.
+	const mobileSortableColIndexes = colOrderFiltered
+		.map(({ colIndex }) => colIndex)
+		.filter((colIndex) => {
+			const sortSequence = cols[colIndex]?.sortSequence;
+			return !(sortSequence && sortSequence.length === 0);
+		});
+
+	const handleMobileSortChange = (colIndex: number, order: SortOrder) => {
+		const sortBys: SortBy[] = [[colIndex, order]];
+		state.settingsCache.set("DataTableSort", sortBys);
+		setStatePartial({
+			currentPage: 1,
+			sortBys,
+		});
+	};
+
 	const highlightCols =
 		state.sortBys === undefined
 			? []
@@ -618,6 +676,29 @@ export const DataTable = ({
 							) : null}
 						</div>
 					) : null}
+					{useCards ? (
+						<DataTableContext value={dataTableContext}>
+							{hideAllControls ? null : (
+								<MobileControls
+									cols={cols}
+									sortableColIndexes={mobileSortableColIndexes}
+									sortBys={state.sortBys}
+									onSortChange={handleMobileSortChange}
+									searchText={state.searchText}
+									onSearch={(searchText) => {
+										setStatePartial({ currentPage: 1, searchText });
+									}}
+									hideSearch={hideMenuToo}
+								/>
+							)}
+							<MobileCards
+								rows={processedRowsPage}
+								cols={visibleCols}
+								primaryIndex={cardPrimaryIndex}
+								visiblePairs={mobileCardVisiblePairs}
+							/>
+						</DataTableContext>
+					) : (
 					<ResponsiveTableWrapper
 						className={clsx(
 							classNameWrapper,
@@ -648,8 +729,9 @@ export const DataTable = ({
 							table
 						)}
 					</ResponsiveTableWrapper>
+					)}
 					{!hideAllControls && pagination ? (
-						<div className="d-flex align-items-center">
+						<div className="d-flex align-items-center flex-wrap">
 							<Info
 								end={end}
 								numRows={numRowsFiltered}
@@ -663,6 +745,10 @@ export const DataTable = ({
 								perPage={state.perPage}
 							/>
 						</div>
+					) : null}
+					{/* Card labels already spell the columns out, so this is only for table mode */}
+					{!useCards && !hideAllControls ? (
+						<ColumnDefinitions cols={visibleCols} />
 					) : null}
 				</div>
 			</div>

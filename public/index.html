@@ -58,6 +58,36 @@
 			}
 			window.themeCSSLink = loadCSS(getThemeFilename(getTheme()));
 
+			// Text size. Stamped on <html> before the stylesheet is applied, so there's no flash of
+			// the wrong size on load — same reasoning as the theme above. The attribute is what
+			// _tokens.scss keys the root font-size off, so one attribute rescales the whole app.
+			// A device preference, not a league setting, so it lives in localStorage like the theme.
+			function getFontScale() {
+				try {
+					var local = localStorage.getItem("fontScale");
+					if (
+						local === "compact" ||
+						local === "large" ||
+						local === "xlarge"
+					) {
+						return local;
+					}
+				} catch (error) {
+					// Cookies/storage disabled — fall through to the default
+				}
+				return "default";
+			}
+			function applyFontScale(scale) {
+				if (scale === "default") {
+					document.documentElement.removeAttribute("data-font-scale");
+				} else {
+					document.documentElement.setAttribute("data-font-scale", scale);
+				}
+			}
+			window.getFontScale = getFontScale;
+			window.applyFontScale = applyFontScale;
+			applyFontScale(getFontScale());
+
 			window.enableLogging =
 				location.host.indexOf("GOOGLE_ANALYTICS_COOKIE_DOMAIN") >= 0;
 
@@ -102,7 +132,11 @@
 		BANNER_ADS_CODE
 	</head>
 
-	<body class="h-100" style="padding-top: 52px">
+	<!-- Body top padding (clearing the fixed navbar) comes from `body { padding-top:
+	var(--zen-navbar-h) }` in public/css/_tokens.scss, not an inline style, so it tracks the
+	navbar's real height at any text scale. The stylesheet <link> is appended synchronously in the
+	<head> script above, so there's no flash of unpadded content. -->
+	<body class="h-100">
 		<div id="content" class="h-100 d-flex flex-column">
 			<div style="margin: 0 15px">
 				<div style="max-width: 360px; margin: 0 auto">

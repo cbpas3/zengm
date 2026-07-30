@@ -376,6 +376,18 @@ const Header = ({
 						sortClassName = getSortClassName(sortBys, colIndex);
 					}
 
+					// aria-sort so screen readers announce the current sort, and aria-label so the
+					// column's full name is available to them even though the visible text is an
+					// abbreviation. Sighted touch users get the same information from
+					// ColumnDefinitions below the table (a `title=` tooltip needs hover, which a
+					// touch screen does not have) and from the mobile card labels.
+					let ariaSort: "ascending" | "descending" | undefined;
+					if (sortClassName === "sorting_asc") {
+						ariaSort = "ascending";
+					} else if (sortClassName === "sorting_desc") {
+						ariaSort = "descending";
+					}
+
 					return (
 						<th
 							className={clsx(classNames, sortClassName)}
@@ -384,6 +396,8 @@ const Header = ({
 								handleColClick(event, colIndex);
 							}}
 							title={desc}
+							aria-label={desc ? `${title} — ${desc}` : undefined}
+							aria-sort={ariaSort}
 							style={{ width }}
 						>
 							{titleReact ?? title}

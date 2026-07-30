@@ -35,6 +35,14 @@ export const buildCss = async (
 				safelist: {
 					standard: [/^qc-cmp2-persistent-link$/],
 					greedy: [
+						// Accessibility text-size scale. The `html[data-font-scale="..."]` rules in
+						// public/css/_tokens.scss are only referenced from the pre-paint inline
+						// script in public/index.html, which is not part of PurgeCSS's content glob
+						// (build/gen/*.js), so without this the whole Text Size setting compiles
+						// fine, works in `pnpm run dev`, and is silently dead in production.
+						// See MOBILE_FIRST_ACCESSIBILITY_PLAN.md §1.3.
+						/data-font-scale/,
+
 						// react-bootstrap stuff
 						/^modal/,
 						/^navbar/,

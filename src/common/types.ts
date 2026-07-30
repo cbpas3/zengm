@@ -5,6 +5,10 @@ import type * as views from "../worker/views/index.ts";
 
 export type NonEmptyArray<T> = [T, ...T[]];
 
+// User-selectable text size. Keys the root font-size in public/css/_tokens.scss:
+// compact 16px / default 18px / large 21px / xlarge 24px.
+export type FontScale = "default" | "compact" | "large" | "xlarge";
+
 export type Env = {
 	enableLogging: boolean;
 	heartbeatID: string;
@@ -21,6 +25,10 @@ declare global {
 		freestar: any;
 		getTheme: () => "dark" | "light";
 		getThemeFilename: (theme: "dark" | "light") => string;
+		// Text size, for the accessibility scale. Set up by the pre-paint script in
+		// public/index.html so the attribute is on <html> before first paint.
+		getFontScale: () => FontScale;
+		applyFontScale: (scale: FontScale) => void;
 		heartbeatID: string;
 		mobile: boolean;
 		releaseStage: "unknown" | "development" | "beta" | "production";

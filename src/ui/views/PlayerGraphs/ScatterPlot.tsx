@@ -269,7 +269,8 @@ const ScatterPlot = <Row extends unknown>({
 						<tspan
 							baselineShift="super"
 							style={{
-								fontSize: 10,
+								// em, not a fixed 10px, so the superscript tracks the text scale
+								fontSize: "0.6em",
 							}}
 						>
 							2
