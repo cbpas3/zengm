@@ -606,26 +606,30 @@ Each prompt below is self-contained. Read the relevant files before sending the 
 >
 > const finalVal = limitRating(Math.max(newVal, floor));
 > (ratings as any)[key] = finalVal;
+> ```
 >
+> yes
 > // After application, decay the floor by 1 if not naturally met
 > if (isFocusKey && persistedFloor !== undefined && devOptions?.focusFloor) {
-> 	if (newVal >= persistedFloor) {
-> 		// Player met the floor naturally — hold it at current value
-> 		devOptions.focusFloor[key as string] = finalVal;
-> 	} else {
-> 		// Player didn't reach floor — decay by 1 (min: 3 below original snapshot)
-> 		const originalSnapshot = ratingSnapshot[key as string] ?? persistedFloor;
-> 		devOptions.focusFloor[key as string] = Math.max(
-> 			persistedFloor - 1,
-> 			originalSnapshot - 3,
-> 		);
-> 	}
+> if (newVal >= persistedFloor) {
+> // Player met the floor naturally — hold it at current value
+> devOptions.focusFloor[key as string] = finalVal;
+> } else {
+> // Player didn't reach floor — decay by 1 (min: 3 below original snapshot)
+> const originalSnapshot = ratingSnapshot[key as string] ?? persistedFloor;
+> devOptions.focusFloor[key as string] = Math.max(
+> persistedFloor - 1,
+> originalSnapshot - 3,
+> );
 > }
+> }
+>
 > ```
 >
 > **Step E — In `develop.ts`**, after `developSeason` returns, write the mutated `devOptions.focusFloor` back to `p.focusFloor`. This makes the decay persistent across seasons.
 >
 > Remove the `ratingSnapshot` logic for focus keys from `developSeason.ts` since `focusFloor` now handles it. Keep the snapshot only as a reference for the `-3` lower bound.
+> ```
 
 ---
 
