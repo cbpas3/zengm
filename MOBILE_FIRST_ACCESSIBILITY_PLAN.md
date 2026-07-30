@@ -29,7 +29,7 @@ These are commitments, not aspirations. Every phase's acceptance criteria trace 
 | Gap between adjacent targets   | ≥ **8px**                                                                | Mis-tap prevention.                                                                                                    |
 | Contrast — body text           | ≥ **7:1** (WCAG AAA)                                                     | AA's 4.5:1 is not enough for aging eyes. Secondary/muted text is the main offender today.                              |
 | Contrast — large text / UI     | ≥ 4.5:1                                                                  | One step above AA's 3:1.                                                                                                |
-| Reflow                         | **No two-dimensional scrolling at 320px viewport width**                 | WCAG 1.4.10. The app fails this badly today on ~60 table pages. This is the single largest piece of work (Phase 4).     |
+| Reflow                         | **No two-dimensional scrolling at 320px viewport width**                 | WCAG 1.4.10 — but see the correction in §16: data tables are an explicit 1.4.10 exception and the app already wrapped them in a contained scroller, so the measured document-overflow count was 6, not ~60 pages. Phase 4's justification is usability at 18-24px type, not a conformance failure. |
 | Hover-only information        | **Zero**                                                                 | Column definitions today live in `title=` attributes — unreachable on touch. Must become tappable.                     |
 | Orientation                    | Portrait and landscape both usable                                       | WCAG 1.3.4.                                                                                                            |
 | Motion                         | Respect `prefers-reduced-motion`                                         | Vestibular safety; also the sidebar/fade transitions.                                                                  |
@@ -779,3 +779,92 @@ break.
   is not done.
 - **Do not** add a UI library, a CSS framework, or a CSS-in-JS runtime. Bootstrap 5.3.8 + SCSS is the
   stack.
+
+---
+
+## 16. Implementation results (measured, not asserted)
+
+Phases 0-4 and 6-8 are implemented and verified against a real production build. Phase 5's
+archetype sweep is partially done — see "Not done" below.
+
+### Headline numbers
+
+Measured by `tools/a11y/audit.ts` against `SPORT=basketball pnpm run build` output, with a league
+bootstrapped and one full season simmed.
+
+| Matrix | Baseline | After | Change |
+| ------ | -------- | ----- | ------ |
+| Full: 116 routes x 3 viewports x 3 text scales (1,044 page-loads) | **25,733** | see `tools/a11y/out/report.md` | — |
+| Quick slice: 116 routes at 390x844, default 18px scale | **3,350** | **266** | **-92%** |
+
+Quick-slice breakdown:
+
+| Kind | Baseline | After |
+| ---- | -------- | ----- |
+| Text below 14px | 1,601 | **0** |
+| Touch target below 24x24 (WCAG 2.5.8 AA floor) | 505 | **1** |
+| Touch target below 44x44 (WCAG 2.5.5 AAA target) | 848 | 191 |
+| axe-core violations | 395 | 73 |
+| Horizontal document overflow | 1 | **1** |
+
+### Corrections to this document's original claims
+
+1. **Reflow was overstated.** §0 originally said the app "fails WCAG 1.4.10 badly on ~60 table
+   pages." Measured, document-level horizontal overflow occurred on **6 cells of 1,044** — because
+   every `DataTable` is already inside a `.table-responsive` contained scroller, and WCAG 1.4.10
+   explicitly excepts "content requiring two-dimensional layout for usage or meaning," which data
+   tables are. The card layout is still the right call for this audience — sideways-scrolling a
+   25-column table at 24px type is miserable — but the honest justification is **usability**, not
+   conformance.
+
+2. **A fixed `--zen-navbar-h` token cannot work.** §4.1 specified static per-breakpoint values.
+   In practice the navbar renders 73-85px against a 63px token, because its height is content-driven
+   (the phase/status block wraps differently per phase, and every child gained a `min-height`). That
+   put the score strip under the navbar on 101 of 116 routes — caught by the harness, not by eye.
+   `src/ui/hooks/useNavbarHeight.ts` now measures it with a `ResizeObserver` and the token is a
+   first-paint fallback only.
+
+3. **PurgeCSS also strips attribute selectors.** §1.3 warned about class names. The `data-font-scale`
+   rules were deleted from the production CSS because the only literal reference lives in
+   `public/index.html`, which is not in PurgeCSS's `build/gen/*.js` content glob — so the entire Text
+   Size setting worked in `pnpm run dev` and was dead in production. Now safelisted in
+   `buildCss.ts`. This is the single best argument for the plan's "production build every phase" rule.
+
+### Known residuals
+
+- **1 document overflow**: the box-score header (`gameLogBoxScore`) is ~30px too wide. The
+  offending row was improved (434px -> 420px) but its parent flex row is the real cause; fixing it
+  needs a box-score header layout change rather than a utility-class tweak.
+- **1 sub-24px control**: a 13x13 `input` on the roster page, not reproducible outside the audit's
+  league state.
+- **191 targets between 24 and 44px**: above the WCAG 2.5.8 AA floor, below the 2.5.5 AAA target.
+  The bulk are the league score strip's dense links (secondary navigation whose destinations are all
+  reachable from the main nav and standings — 2.5.8's "equivalent control" exception) and
+  checkbox/radio inputs at 27px, which sit inside a 44px `.form-check` row so the label is part of
+  the target.
+- **73 axe violations**, down from 395: mostly per-view `select-name`/`label`/`image-alt` in
+  specific forms, plus `color-contrast` on a handful of coloured badges. No longer systemic.
+- **9 Sass contrast warnings** on every build — hover/active tints of three dark-theme button
+  variants. Documented at the `$min-contrast-ratio` line in `dark.scss`; fixing them is a palette
+  redesign, not a legibility fix.
+- **`pnpm run test`**: 58 files / 369 tests pass. The 5 failures are `*.test.browser.ts`, which need
+  Firefox/WebKit/Chromium builds absent from this sandbox — environmental, unrelated to this work.
+- **`pnpm run lint`**: 28 pre-existing `tsc` errors on `master` in this fork's own feature code
+  (`TradingBlock`, `SavedTrades`, `TradeProposals`, `PlayerDevelopmentControls`, `developSeason`).
+  Untouched, and no new errors were introduced.
+
+### Not done (Phase 5 long tail)
+
+The archetype-level fixes landed (typography, chrome, controls and card tables apply everywhere),
+but these bespoke layouts were left as-is because they need design work rather than tokens, and the
+audit does not show them failing:
+
+- **Playoffs bracket** still renders as a wide contained scroller rather than a round-paged or
+  vertical mobile form.
+- **Box scores** (`BoxScore.basketball.tsx` and the other three sports) still use raw tables in a
+  scroller instead of per-player cards.
+- **Trade** stacks correctly below `md` but its summary panel is not sticky on mobile, so the running
+  value is off-screen while picking assets.
+- **`window.mobile` migration**: 43 non-ad call sites remain. 28 are the `defaultStickyCols` pattern
+  that card mode makes dead on mobile; deleting them is safe cleanup for a follow-up.
+- **T-D2-style landscape/orientation pass** — the audit only measures portrait viewports.

@@ -47,6 +47,15 @@
 	margin-bottom: 8px !important;
 }
 
+// With tap-sized page links, a 15-page numeric pager is ~470px wide and was the last source of
+// document overflow at the 24px text scale. Wrapping keeps every page reachable (better for this
+// audience than collapsing to Prev/Next) without widening the page.
+.pagination {
+	flex-wrap: wrap;
+	justify-content: center;
+	row-gap: 0.25rem;
+}
+
 table.table {
 	thead {
 		.sorting,
@@ -135,6 +144,11 @@ table.table thead .sorting_desc_disabled {
 	// Long player/team names must wrap here - the global `table { white-space: nowrap }` does not
 	// apply, and nothing should be clipped.
 	white-space: normal;
+
+	// A card must never be the thing that widens the page, at any text scale
+	max-width: 100%;
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .dt-card-span {
@@ -165,6 +179,7 @@ table.table thead .sorting_desc_disabled {
 	font-weight: 600;
 	line-height: var(--zen-lh-tight);
 	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 // Two columns at the widest phones, one below - a label/value pair needs room for the full column
@@ -188,12 +203,17 @@ table.table thead .sorting_desc_disabled {
 	gap: 0.5rem;
 	padding: 0.25rem 0;
 	border-bottom: 1px solid var(--bs-border-color-translucent);
+	// At the 24px scale a long label plus its value no longer fits on one line; wrapping the pair
+	// keeps the card inside the viewport instead of widening the document.
+	flex-wrap: wrap;
+	min-width: 0;
 
 	dt {
 		font-size: var(--zen-fs-sm);
 		font-weight: 400;
 		color: var(--bs-secondary-color);
 		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 
 	dd {
@@ -201,8 +221,11 @@ table.table thead .sorting_desc_disabled {
 		font-weight: 500;
 		font-variant: tabular-nums;
 		margin: 0;
+		margin-left: auto;
 		text-align: right;
-		white-space: nowrap;
+		min-width: 0;
+		// Keep a single number together, but never at the cost of overflowing the card
+		overflow-wrap: anywhere;
 	}
 }
 

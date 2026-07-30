@@ -688,7 +688,10 @@ export const DataTable = ({
 									onSearch={(searchText) => {
 										setStatePartial({ currentPage: 1, searchText });
 									}}
-									hideSearch={hideMenuToo}
+									// The standard Controls row above already renders a search input
+									// whenever it is shown, so only supply one here when it isn't —
+									// otherwise the user sees two identical search boxes.
+									hideSearch={!hideMenuToo}
 								/>
 							)}
 							<MobileCards
