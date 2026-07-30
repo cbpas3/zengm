@@ -15,14 +15,14 @@
 
 :root {
 	// ---- Type scale ------------------------------------------------------------------------
-	// App CSS must reference these rather than raw px. Sizes shown at the 18px default root.
-	--zen-fs-xs: 0.8125rem; // 14.6px — absolute floor: skill chips, jersey numbers, badges
-	--zen-fs-sm: 0.875rem; // 15.8px — labels, secondary metadata
-	--zen-fs-body: 1rem; // 18px   — body copy, table cells, form controls
-	--zen-fs-lg: 1.125rem; // 20.3px — h4, emphasised numbers, primary buttons
-	--zen-fs-xl: 1.25rem; // 22.5px — h3
-	--zen-fs-2xl: 1.5rem; // 27px   — h2, modal titles
-	--zen-fs-3xl: 1.75rem; // 31.5px — h1
+	// App CSS must reference these rather than raw px. Sizes shown at the 21px default root.
+	--zen-fs-xs: 0.8125rem; // 17.1px — absolute floor: skill chips, jersey numbers, badges
+	--zen-fs-sm: 0.875rem; // 18.4px — labels, secondary metadata
+	--zen-fs-body: 1rem; // 21px   — body copy, table cells, form controls
+	--zen-fs-lg: 1.125rem; // 23.6px — h4, emphasised numbers, primary buttons
+	--zen-fs-xl: 1.25rem; // 26.3px — h3
+	--zen-fs-2xl: 1.5rem; // 31.5px — h2, modal titles
+	--zen-fs-3xl: 1.75rem; // 36.8px — h1
 
 	--zen-lh-tight: 1.25; // headings only
 	--zen-lh-body: 1.5; // WCAG 1.4.12 minimum
@@ -62,15 +62,19 @@
 //
 // The attribute is stamped on <html> before first paint by the inline script in public/index.html,
 // so there is no flash of the wrong size on load.
+// Note the deliberate mismatch between the FontScale key names and their numeric order: "default"
+// (no attribute — what a fresh visitor and anyone who hasn't touched the setting gets) is 21px, and
+// "large" is 18px. The four keys (compact/default/large/xlarge) are just plumbing — see the <select>
+// in GlobalSettings/index.tsx for the actual ascending-size labels the user sees.
 html {
-	font-size: 112.5%; // 18px — the elderly-first default
+	font-size: 131.25%; // 21px — the elderly-first default
 	-webkit-text-size-adjust: 100%; // stop iOS Safari re-scaling text in landscape
 }
 html[data-font-scale="compact"] {
 	font-size: 100%; // 16px
 }
 html[data-font-scale="large"] {
-	font-size: 131.25%; // 21px
+	font-size: 112.5%; // 18px
 }
 html[data-font-scale="xlarge"] {
 	font-size: 150%; // 24px

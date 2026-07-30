@@ -150,10 +150,13 @@ const GlobalSettings = (props: View<"globalSettings">) => {
 							value={state.fontScale}
 						>
 							{/* Plain-language labels with the actual sizes, since "112.5%" means
-							    nothing to the person who needs this setting */}
+							    nothing to the person who needs this setting. Listed in ascending
+							    size order for the user; this does not match the underlying
+							    FontScale key order (see _tokens.scss) — "default" means "no
+							    attribute set" in the code, not "smallest" or "middle". */}
 							<option value="compact">Standard (16px)</option>
-							<option value="default">Large (18px) — recommended</option>
-							<option value="large">Larger (21px)</option>
+							<option value="large">Large (18px)</option>
+							<option value="default">Larger (21px) — recommended</option>
 							<option value="xlarge">Largest (24px)</option>
 						</select>
 					</div>

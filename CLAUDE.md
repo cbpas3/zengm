@@ -953,6 +953,18 @@ mechanism exactly, so there is no flash of the wrong size on load. Persisted in 
 device preference — *not* a league/account option — and synced across tabs by the `storage` handler
 in `src/ui/index.tsx`. Exposed as "Text Size" in Global Settings.
 
+**The default is 21px, not the 18px this feature originally shipped with** (`public/css/_tokens.scss`:
+`html { font-size: 131.25% }`) — bumped up one tier after review, since this app's stated audience
+is elderly/low-vision. The `FontScale` union's key names do **not** match ascending size order:
+`"default"` means "no `data-font-scale` attribute set" (i.e. what a fresh visitor gets) and happens
+to be the *largest* common tier at 21px; `"large"` is actually smaller, at 18px. This is intentional
+— the key names are internal plumbing, and the `<select>` in `GlobalSettings/index.tsx` lists the
+options in ascending visible order (Standard 16 → Large 18 → **Larger 21, recommended** → Largest
+24) regardless of what the underlying key is called. If you touch this again, don't try to rename the
+keys into size order — that would touch `localStorage` compatibility for existing users, safelist
+regexes in `buildCss.ts`, and every place that reads `FontScale`. Change the label text and the CSS
+values, not the keys.
+
 ### Chrome geometry: the eight magic numbers
 
 The fixed navbar's height used to be duplicated as `52px`/`60px` in eight places, including an
@@ -1020,11 +1032,35 @@ of scope for a legibility pass; see the comment at the `$min-contrast-ratio` lin
 ### Results
 
 Measured by the harness below against a real production build, on all 116 audited routes at 390x844
-at the default 18px scale: **3,350 violations -> 266 (-92%)**. Text below 14px went 1,601 -> **0**;
-sub-24px touch targets (the WCAG 2.5.8 AA floor) 505 -> **1**; axe-core 395 -> **73**. The remaining
-touch-target findings are all between 24 and 44px, i.e. above the AA floor and below the AAA target.
-Full numbers, the residuals, and three corrections to the plan's original claims are in
+**at the (then-)default 18px scale**: **3,350 violations -> 266 (-92%)**. Text below 14px went 1,601
+-> **0**; sub-24px touch targets (the WCAG 2.5.8 AA floor) 505 -> **1**; axe-core 395 -> **73**. The
+remaining touch-target findings are all between 24 and 44px, i.e. above the AA floor and below the
+AAA target. Full numbers, the residuals, and three corrections to the plan's original claims are in
 `MOBILE_FIRST_ACCESSIBILITY_PLAN.md` §16.
+
+The default was subsequently bumped to 21px (see "The scale mechanism" above) — **this audit run was
+not repeated at 21px**. Re-run `node tools/a11y/audit.ts --quick` (a few minutes, reuses the cached
+league profile) before trusting these exact numbers if you change the scale mechanism again; nothing
+about the 18→21px change should regress them (it's the same CSS at a larger root size, same as the
+existing `xlarge` scale that was already audited), but it hasn't been re-measured.
+
+### Future work (fast-follow, not yet done)
+
+Phase 5's systemic pass (typography/chrome/targets/card-tables everywhere) is complete, but four
+bespoke layouts were deliberately left as-is because they need real design decisions, not tokens —
+none of them show up as audit failures, they're just not as good as they could be:
+
+- **Playoffs bracket** (`Playoffs.tsx`) still renders as a wide contained scroller instead of a
+  round-paged or vertical mobile layout.
+- **Box scores** (`BoxScore.basketball.tsx` + the other 3 sports) still use raw tables in a scroller
+  instead of per-player cards.
+- **Trade** (`Trade/index.tsx`) stacks correctly below `md` but its summary panel isn't sticky on
+  mobile, so the running trade value scrolls off-screen while picking assets.
+- **`window.mobile` migration**: 43 non-ad call sites remain (`grep -rn "window\.mobile" src/ui`).
+  28 are the single `defaultStickyCols={window.mobile ? 0 : N}` pattern, which the DataTable card
+  mode makes dead code on mobile — safe cleanup whenever someone next touches those files.
+
+See `MOBILE_FIRST_ACCESSIBILITY_PLAN.md` §16 ("Not done") for the same list with more detail.
 
 ### Audit harness (`tools/a11y/`)
 

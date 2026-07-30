@@ -19,9 +19,9 @@ These are commitments, not aspirations. Every phase's acceptance criteria trace 
 
 | Property                       | Target                                                                   | Rationale                                                                                                             |
 | ------------------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Default body text              | **18px** (currently 13px)                                                | Low-vision baseline. 16px is the general-web floor; 18px is the low-vision floor and this app's audience is stated.    |
+| Default body text              | **21px** (currently 13px) — raised from an initial 18px after review     | Low-vision baseline. 16px is the general-web floor; this app's audience is explicitly elderly/low-vision, so default one tier higher than the floor. |
 | Absolute minimum text anywhere | **14px**                                                                 | Kills the 10px `.skill` / `.jersey-number-name` / 12px `h5` / 12px filter-input tier entirely.                         |
-| User-selectable scale          | 16 / **18 (default)** / 21 / 24px                                        | One control, whole app. See Phase 6.                                                                                   |
+| User-selectable scale          | 16 / 18 / **21 (default)** / 24px                                        | One control, whole app. See Phase 6. Note the shipped `FontScale` key names don't match this ascending order — see §11 and CLAUDE.md's "The scale mechanism." |
 | Line height (body)             | ≥ **1.5**                                                                | WCAG 1.4.12 Text Spacing.                                                                                              |
 | Line height (headings)         | ≥ 1.25                                                                   | Same, with tighter optical setting allowed for large type.                                                             |
 | Touch target — primary actions | **48 × 48** CSS px                                                       | Play button, Save, Sign, Trade, Draft, nav links, pagination. Material's floor; comfortable with tremor.                |
@@ -367,7 +367,7 @@ properties rather than utility classes.
 ```scss
 :root {
 	/* ---- Type scale. All app CSS references these, never a raw px value. ---- */
-	--zen-fs-xs:   0.8125rem;  /* absolute floor: badges, skill chips. 14.6px @18px root */
+	--zen-fs-xs:   0.8125rem;  /* absolute floor: badges, skill chips. 17.1px @21px root */
 	--zen-fs-sm:   0.875rem;
 	--zen-fs-body: 1rem;       /* tables, body copy, form controls */
 	--zen-fs-lg:   1.125rem;   /* h4, emphasised numbers, primary buttons */
@@ -400,13 +400,19 @@ applied once at the root (§4.2). That separation is what makes one setting resc
 
 ```scss
 html {
-	font-size: 112.5%;              /* 18px — the elderly-first default */
+	font-size: 131.25%;             /* 21px — the elderly-first default */
 	-webkit-text-size-adjust: 100%; /* stop iOS Safari from re-scaling in landscape */
 }
-html[data-font-scale="compact"] { font-size: 100%;   } /* 16px */
-html[data-font-scale="large"]   { font-size: 131.25%; } /* 21px */
-html[data-font-scale="xlarge"]  { font-size: 150%;   } /* 24px */
+html[data-font-scale="compact"] { font-size: 100%;    } /* 16px */
+html[data-font-scale="large"]   { font-size: 112.5%;  } /* 18px */
+html[data-font-scale="xlarge"]  { font-size: 150%;    } /* 24px */
 ```
+
+Note the key names deliberately don't match ascending size order: `"default"` means "no
+`data-font-scale` attribute set" (what a fresh visitor gets), which is why it's the largest common
+tier here rather than the middle one. `"large"` ends up smaller than `"default"`. This is fine — the
+keys are internal plumbing; §11's `<select>` presents the labels to the user in actual ascending
+size order regardless of what the key is called.
 
 Using `%` (not `px`) keeps the user's own browser/OS font-size preference in the chain — a `px` root
 would override it, which for this audience is exactly the wrong call.
@@ -666,8 +672,10 @@ Mirror the existing theme mechanism exactly (§1.4). Do not invent a second mech
    Expose `window.getFontScale` alongside `window.getTheme` (declare it in `src/common/types.ts`'s `Window`
    interface, next to `getTheme`/`themeCSSLink` (around `:22-27`)).
 2. **`src/ui/views/GlobalSettings/index.tsx`** — a new `<select>` in the same row grid as Color
-   Scheme / Units (around `:129-175`), labelled **"Text Size"**, with plain-language options:
-   *Standard (16px) · Large (18px, recommended) · Larger (21px) · Largest (24px)*. Persist via
+   Scheme / Units (around `:129-175`), labelled **"Text Size"**, with plain-language options in
+   ascending size order: *Standard (16px) · Large (18px) · Larger (21px, recommended) · Largest
+   (24px)*. The option order does not match the underlying `FontScale` key order — see §4.2's note.
+   Persist via
    `safeLocalStorage.setItem("fontScale", …)` in `handleFormSubmit` (`:67-101`), next to the existing
    `theme` write, and apply immediately by setting the attribute — no reload.
 3. **`src/ui/index.tsx:41-45`** — the `storage` event handler already syncs `theme` across tabs. Add a
@@ -792,7 +800,14 @@ archetype sweep is partially done — see "Not done" below.
 Measured by `tools/a11y/audit.ts` against `SPORT=basketball pnpm run build` output, with a league
 bootstrapped and one full season simmed.
 
-The comparison is on the **quick slice** — all 116 routes at 390x844 at the default 18px scale —
+**Decision after this audit ran: the default was bumped from 18px to 21px** (§0, §4.2). The numbers
+below are exactly as measured, at the 18px default that was in place at the time — they were **not**
+re-measured at 21px. Nothing about that change should regress them (same CSS rendered at a larger
+root size, structurally identical to the `xlarge` scale already covered by the "after" run's 3-scale
+sweep), but treat the headline numbers below as validated for 18px specifically until re-run.
+
+The comparison is on the **quick slice** — all 116 routes at 390x844 at the (then-)default 18px
+scale —
 because that is the matrix that was measured cleanly before and after. The baseline full matrix
 (1,044 page-loads across 3 viewports x 3 scales) totalled **25,733**; run
 `node tools/a11y/audit.ts` to reproduce the after-figure for the full matrix.
@@ -871,11 +886,12 @@ both scales.
   (`TradingBlock`, `SavedTrades`, `TradeProposals`, `PlayerDevelopmentControls`, `developSeason`).
   Untouched, and no new errors were introduced.
 
-### Not done (Phase 5 long tail)
+### Not done (Phase 5 long tail) — deferred by decision, not forgotten
 
 The archetype-level fixes landed (typography, chrome, controls and card tables apply everywhere),
-but these bespoke layouts were left as-is because they need design work rather than tokens, and the
-audit does not show them failing:
+but these bespoke layouts were deliberately left as-is: **explicitly deferred, not an oversight** —
+they need real design work rather than a token change, and none of them show up as audit failures.
+Pick this list back up whenever there's appetite for another pass:
 
 - **Playoffs bracket** still renders as a wide contained scroller rather than a round-paged or
   vertical mobile form.
