@@ -1017,6 +1017,15 @@ the target, and only while hovered/pressed). Fixing them means redesigning that 
 of scope for a legibility pass; see the comment at the `$min-contrast-ratio` line for detail. Do not
 "fix" the warnings by lowering the ratio back.
 
+### Results
+
+Measured by the harness below against a real production build, on all 116 audited routes at 390x844
+at the default 18px scale: **3,350 violations -> 266 (-92%)**. Text below 14px went 1,601 -> **0**;
+sub-24px touch targets (the WCAG 2.5.8 AA floor) 505 -> **1**; axe-core 395 -> **73**. The remaining
+touch-target findings are all between 24 and 44px, i.e. above the AA floor and below the AAA target.
+Full numbers, the residuals, and three corrections to the plan's original claims are in
+`MOBILE_FIRST_ACCESSIBILITY_PLAN.md` §16.
+
 ### Audit harness (`tools/a11y/`)
 
 "Every page" is ~190 routes over 123 view modules, so progress is measured, not asserted.

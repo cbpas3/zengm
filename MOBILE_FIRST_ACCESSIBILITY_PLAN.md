@@ -792,20 +792,38 @@ archetype sweep is partially done — see "Not done" below.
 Measured by `tools/a11y/audit.ts` against `SPORT=basketball pnpm run build` output, with a league
 bootstrapped and one full season simmed.
 
+The comparison is on the **quick slice** — all 116 routes at 390x844 at the default 18px scale —
+because that is the matrix that was measured cleanly before and after. The baseline full matrix
+(1,044 page-loads across 3 viewports x 3 scales) totalled **25,733**; run
+`node tools/a11y/audit.ts` to reproduce the after-figure for the full matrix.
+
 | Matrix | Baseline | After | Change |
 | ------ | -------- | ----- | ------ |
-| Full: 116 routes x 3 viewports x 3 text scales (1,044 page-loads) | **25,733** | see `tools/a11y/out/report.md` | — |
-| Quick slice: 116 routes at 390x844, default 18px scale | **3,350** | **266** | **-92%** |
-
-Quick-slice breakdown:
+| Quick slice: 116 routes, 390x844, 18px | **3,350** | **266** | **-92%** |
 
 | Kind | Baseline | After |
 | ---- | -------- | ----- |
 | Text below 14px | 1,601 | **0** |
 | Touch target below 24x24 (WCAG 2.5.8 AA floor) | 505 | **1** |
 | Touch target below 44x44 (WCAG 2.5.5 AAA target) | 848 | 191 |
-| axe-core violations | 395 | 73 |
+| axe-core violations | 395 | **73** |
 | Horizontal document overflow | 1 | **1** |
+| Content hidden under the navbar | 0 | **0** |
+
+### Verified by screenshot, not just by counters
+
+The audit measures sizes; it cannot tell you a layout reads correctly. Screenshotting the production
+build at 390x844 caught two things the counters missed, both now fixed:
+
+- **Two identical search boxes** above every card list — the standard `Controls` row already renders
+  one, and `MobileControls` was adding a second (its `hideSearch` condition was inverted).
+- **The pagination**, not the cards, was the real source of overflow at the 24px scale: a 15-page
+  numeric pager with tap-sized links is ~470px wide against a 390px screen. It now wraps.
+
+Confirmed rendering in a production build: 10 cards per page with full-word labels ("Position", not
+"Pos"), the table at 1280px, the Play bar `fixed` only below `sm`, `--zen-navbar-h` matching the
+navbar's measured height exactly at both 18px (85px) and 24px (107px), and zero document overflow at
+both scales.
 
 ### Corrections to this document's original claims
 
