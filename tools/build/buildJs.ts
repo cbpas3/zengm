@@ -77,8 +77,13 @@ export const buildJs = async (versionNumber: string) => {
 			replaceValue: `/${FOLDER}/${filename}-${hash}.json`,
 		});
 	}
+	// Rewrite the fingerprinted JSON references across ALL emitted JS files, not just the main
+	// worker bundle: the fetch for real-player-data etc. lives in loadData.basketball.ts, which the
+	// bundler code-splits into a worker chunk. Only rewriting worker-<version>.js left the chunk
+	// requesting the now-deleted unhashed path (404 in a production build). replacePaths is every
+	// .js file in the output, so this catches the chunk too; it's a no-op for files without the ref.
 	await replace({
-		paths: [path.join("build", FOLDER, `worker-${versionNumber}.js`)],
+		paths: replacePaths,
 		replaces,
 	});
 

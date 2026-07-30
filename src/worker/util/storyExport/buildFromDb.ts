@@ -37,12 +37,13 @@ const MAX_NOTABLE_GAMES = 3000;
 
 const loadTeams = async (): Promise<RawTeam[]> => {
 	const baseTeams = await idb.cache.teams.getAll();
-	const teamSeasons = (await idb.getCopies.teamSeasons(
-		{},
-		"noCopyCache",
+	// Read teamSeasons/teamStats straight from the object stores (getCopies.teamSeasons requires a
+	// tid or season; we want every team's whole history). The caller flushes the cache first so the
+	// stores are current.
+	const teamSeasons = (await idb.league.getAll(
+		"teamSeasons",
 	)) as unknown as RawTeam["seasons"];
 
-	// teamStats lives in its own store (not a getCopies method); read the raw store, tolerate absence.
 	let teamStats: RawTeam["stats"] = [];
 	try {
 		teamStats = (await idb.league.getAll(
@@ -83,6 +84,10 @@ export const buildStoryExportFromDb = async (
 ): Promise<{ virtualFs: Record<string, unknown>; filename: string }> => {
 	const { includeNotableGames = true, includeFullGames = false } = options;
 
+	// Flush the cache so the raw object-store reads below (teamSeasons, teamStats) see current data,
+	// same as makeExportStream does before a league export.
+	await idb.cache.flush();
+
 	const players = (await idb.getCopies.players(
 		{ activeAndRetired: true },
 		"noCopyCache",
@@ -92,8 +97,8 @@ export const buildStoryExportFromDb = async (
 		undefined,
 		"noCopyCache",
 	)) as unknown as RawPlayoffSeries[];
-	const headToHeads = (await idb.getCopies.headToHeads()) as unknown as
-		RawHeadToHead[];
+	const headToHeads =
+		(await idb.getCopies.headToHeads()) as unknown as RawHeadToHead[];
 	const feats = await idb.getCopies.playerFeats();
 	const featGids = new Set(feats.map((f) => f.gid));
 

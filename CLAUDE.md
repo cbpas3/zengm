@@ -831,6 +831,114 @@ that script exists.
 
 ---
 
+## Feature 10: AI Story Export (Phase 1)
+
+### What it does
+
+The on-device AI writers (Features 3a/3b) are capped by the small free OpenRouter model. This
+feature inverts that: instead of generating prose on-device, it **exports the whole league as a
+rich, interconnected knowledge base** meant to be handed to a strong external model (or a swarm of
+agents) that does the writing — greatest-players lists, franchise histories, rivalries, season
+retrospectives, game recaps. The fork's job becomes producing _facts + structure + prompts_. Full
+design rationale in `AI_STORY_EXPORT_PLAN.md` (grounded in a real 390 MB / ~75-season save: `games`
+are ~89% of the payload, so the narrative layer is small and the box-score bulk is sharded/opt-in).
+
+### The bundle
+
+One navigable JSON file (a "virtual filesystem" object keyed by path — no zip dependency), built by
+`downloadFile`. Contents:
+
+- **Entity tables** — `players`, `teams`: trimmed to narrative fields (face/financial/fuzz noise
+  dropped) and cross-linked (transactions = career movement, relatives, `teamsPlayedFor`, titles,
+  division rivals, `titleDrought`).
+- **Derived canon** (`rankings.json`, `dynasties.json`, `rivalries.json`) — the foundational-article
+  fuel: greatest players (WS + peak + accolades), greatest team-seasons, biggest busts/steals
+  (self-calibrating expected-WS-by-round), dynasties (clustered titles), rivalries (playoff meetings
+  from `playoffSeries` + all-time H2H from `headToHeads`, intensity-ranked).
+- **Game index** (`gameIndex.json`) — one compact row per game (winner, margin, who played,
+  notability) — the queryable spine over the box-score bulk; plus a pre-filtered `notableGames`
+  shard (capped). Full per-season NDJSON box scores are an **opt-in** checkbox (`includeFullGames`).
+- **Embedded docs** — `README.md`, `canon-workflow.md` (ground-truth preamble + tiered prompt
+  library + canon-index mechanism), and `pull_games.py` (an index-driven, constant-memory box-score
+  filter so an agent can pull "all of a player's games" or "only his notable ones" without scanning
+  the bulk).
+
+### Architecture
+
+Focal subject + concentric context, over a normalized ID-linked table set. Canon-first pipeline:
+Tier-0 facts → Tier-1 foundational canon (emits structured canonical claims) → Tier-2 dependent
+pieces (fed the relevant claims so a corpus stays self-consistent). All compute is **pure and
+DB-free** (36 unit tests); one impure module does the `idb` reads and streams games one season at a
+time so the box-score bulk never sits in memory at once.
+
+### Tuning
+
+`CANON_TUNING` (greatness weights, list sizes, dynasty thresholds), `STORY_NOTABILITY` (game-score
+cutoffs), `RIVALRY_TUNING` (intensity weights) — all first-cut constants, each in one place, to be
+recalibrated against a real league (same posture as `GAME_PLAN_TUNING`).
+
+### Key files
+
+| File                                                   | Role                                                                                      |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `AI_STORY_EXPORT_PLAN.md`                              | Design/spec doc (Phase 1 implemented; Phases 2–3 deferred)                                |
+| `src/worker/util/storyExport/types.ts`                 | Raw-input types (export-schema subset) + projected/canon/KB output types                  |
+| `src/worker/util/storyExport/gameNotability.ts`        | Hollinger game score + per-game notability (`STORY_NOTABILITY`)                           |
+| `src/worker/util/storyExport/deriveCanon.ts`           | Greatest players/team-seasons/busts/steals/dynasties (`CANON_TUNING`)                     |
+| `src/worker/util/storyExport/deriveRivalries.ts`       | Rivalries from `playoffSeries` + `headToHeads` (`RIVALRY_TUNING`)                         |
+| `src/worker/util/storyExport/projectEntities.ts`       | Trimmed, cross-linked player/team tables; `attachTitles` (champion = league-max rounds)   |
+| `src/worker/util/storyExport/gameIndex.ts`             | `buildGameIndex` — compact per-game index rows + notable-gid selection                    |
+| `src/worker/util/storyExport/assembleKnowledgeBase.ts` | Pure orchestrator → full table set (game index passed in precomputed)                     |
+| `src/worker/util/storyExport/serialize.ts`             | Bundle files (compact JSON) + `bundleToVirtualFs` single-file delivery                    |
+| `src/worker/util/storyExport/buildFromDb.ts`           | The one impure module: `idb` reads (flush + raw stores), per-season game streaming        |
+| `src/common/storyWorkflow.ts`                          | Ground-truth preamble, Tier-1/Tier-2 prompts, canon-index note, `pull_games.py` (as data) |
+| `src/worker/api/index.ts`                              | `generateStoryExport` endpoint (dynamic-imports the loader)                               |
+| `src/ui/views/ExportStory.tsx`                         | Tools page: opt-in full-games checkbox + one-click download                               |
+| `src/worker/views/exportStory.ts`                      | Static view; registered in views/routeInfos/menuItems (Tools → "AI Story Export")         |
+| `src/worker/util/storyExport/*.test.ts`                | 36 pure-layer unit tests (notability, canon, rivalries, projection, index, assembler)     |
+
+### Gotchas found & fixed while shipping (validated in-app + on the deploy)
+
+1. **`idb.getCopies.teamSeasons` requires a `tid` or `season`** — it throws when given neither, but
+   the export needs every team's whole history. `buildFromDb` reads the `teamSeasons`/`teamStats`
+   object stores directly (`idb.league.getAll`), after `idb.cache.flush()` so the raw reads are
+   current (same as `makeExportStream`).
+2. **Production-build fingerprint bug** (see the Deployment section) — surfaced on the first prod
+   build because the export was the first reason to run one. Fixed in `buildJs.ts`.
+
+### Scope
+
+Phase 1 only: the compact knowledge base + canon + game index + workflow/prompts. The box-score
+bulk is opt-in. Phases 2–3 (scoped Tier-2 exports with canon feedback; league-DB persistence of
+generated articles; dynasty/multi-season pieces) are specced in the plan doc, not built.
+
+---
+
+## Deployment (Vercel)
+
+- Hosted at **https://basketballgm.vercel.app** — Vercel project **`basketballgm`**, scope
+  **`cbpas-projects`**. The repo is linked via `.vercel/` (gitignored). Deploy with
+  `vercel deploy --prod --yes --scope cbpas-projects` (or connect the GitHub repo for auto-deploys).
+- **`vercel.json`** configures a static-SPA deploy: `buildCommand: SPORT=basketball pnpm run build`,
+  `installCommand: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pnpm install --frozen-lockfile` (Playwright's
+  browser download isn't needed for the build and 403s/fails without the skip), `outputDirectory:
+build`, `framework: null`, and a catch-all rewrite `"/(.*)" → "/index.html"` for client-side
+  routing. `engines.node: ^24` — the build runs `.ts` files directly, so Node 24 is required (it's
+  Vercel's default now anyway).
+- The app is **client-side only** (no serverless functions). The league lives in per-origin
+  IndexedDB, so a freshly deployed instance starts empty — create/import a league to populate it.
+- **Production-build fingerprint gotcha (fixed in `buildJs.ts`):** `pnpm run build` fingerprints the
+  generated JSON assets (`real-player-data.json` → `real-player-data-<hash>.json`) and **deletes the
+  unhashed file**, then rewrites the references in the emitted JS. It originally rewrote only the
+  main `worker-<version>.js`, but the actual `fetch` lives in `loadData.basketball.ts`, which the
+  bundler code-splits into a worker **chunk** — so the chunk kept requesting the deleted unhashed
+  path and 404'd in _every_ production build. The fix rewrites references across **all** emitted JS
+  (`replacePaths`), not just the main worker. This was latent because **`pnpm run dev` never
+  fingerprints** (it copies the gen JSON unhashed via `copyFiles`), so it only bit the first
+  production build. If you touch the build's fingerprinting or asset loading, keep this in mind.
+
+---
+
 ## Key Concepts / Gotchas
 
 - **Rating keys**: `tp` = three-point shooting, `fg` = mid-range, `ft` = free throw, `ins` = inside scoring, `dnk` = dunking, `diq` = defensive IQ, `oiq` = offensive IQ, `pss` = passing, `drb` = dribbling, `reb` = rebounding, `stre` = strength, `spd` = speed, `jmp` = jumping, `endu` = endurance
@@ -838,3 +946,5 @@ that script exists.
 - **`developSeason.ts` vs `developSeason.basketball.ts`**: the `.ts` wrapper handles RPD, override, floor, breakthrough. The `.basketball.ts` handles base rating math per key.
 - **SharedWorker**: the game runs its simulation in a web worker. All DB access (`idb.cache.*`, `idb.getCopies.*`) happens in worker context. OpenRouter API calls are made from the worker, not the UI thread.
 - **`makeItWork`**: core trade utility that adds/removes assets to balance trade value. Called with `holdUserConstant: true` so the user's offered players stay fixed.
+- **`SPORT=basketball` for headless builds**: both `pnpm run dev` and `pnpm run build` prompt an interactive sport selector unless the `SPORT` env var is set (read by `tools/lib/getSport.ts`). Set `SPORT=basketball` for any non-interactive/CI/Vercel run. `pnpm run dev` also runs `reset` (wipes `build/`) then serves on `localhost:3000`.
+- **Dev vs. production build (asset fingerprinting)**: `pnpm run dev` copies the generated JSON assets (`real-player-data.json`, `names.json`, …) **unhashed** and does **not** fingerprint; `pnpm run build` fingerprints them (`-<hash>.json`, deleting the unhashed file) and rewrites references in the emitted JS. See the Deployment section for the code-split-chunk gotcha this caused. Net: a bug can be invisible in dev and only appear in a production build.
