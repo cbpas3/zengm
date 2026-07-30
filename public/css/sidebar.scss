@@ -43,10 +43,13 @@ $sidebar-width: 11rem;
 	@extend .mb-1;
 	@extend .text-body-secondary;
 
-	// Make like h2
-	display: block;
+	// Make like h2. These are the drawer's collapse toggles, so they need a real tap height —
+	// they measured 20px tall, and being <a> without href the audit's own check skipped them.
+	display: flex;
+	align-items: center;
+	min-height: var(--zen-tap-min);
 	font-weight: 500;
-	line-height: 1.2;
+	line-height: var(--zen-lh-body);
 
 	&:hover {
 		text-decoration: none;

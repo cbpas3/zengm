@@ -130,6 +130,11 @@ const Select = ({
 			<select
 				value={value}
 				className="dropdown-select"
+				// These are the season/team/type switchers in the title bar. They have no visible
+				// label (the current value *is* the label), so without this axe reports select-name
+				// on nearly every page and a screen reader announces an unnamed combobox. `field` is
+				// the machine name ("seasons", "teams", "playoffs", …) so make it readable.
+				aria-label={`Change ${field.replace(/([A-Z])/g, " $1").toLowerCase()}`}
 				onChange={(event) => {
 					handleChange(event.currentTarget.value);
 				}}

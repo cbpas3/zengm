@@ -386,8 +386,13 @@ export const ScoreBox = memo(
 									)}
 								>
 									{imgURL ? (
-										<a href={rosterURL}>
+										// A logo-only link needs a name of its own: axe reported this as
+										// both link-name and image-alt on every league page, since the
+										// score strip renders on all of them. alt="" marks the logo
+										// decorative and the aria-label carries the name once.
+										<a href={rosterURL} aria-label={`${teamName} roster`}>
 											<TeamLogoInline
+												alt=""
 												imgURL={imgURL}
 												includePlaceholderIfNoLogo
 												size={small ? 24 : 36}
@@ -416,7 +421,11 @@ export const ScoreBox = memo(
 											) : null}
 											<a
 												href={rosterURL}
-												className={!small ? "fw-bold" : undefined}
+												// The small variant previously had no class, so no rule
+												// could give it a tap size; it measured 29x24.
+												className={clsx("score-box-team-link", {
+													"fw-bold": !small,
+												})}
 											>
 												{teamName}
 											</a>

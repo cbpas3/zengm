@@ -24,6 +24,12 @@ export const ResponsiveTableWrapper = ({
 				className,
 			)}
 			ref={ref}
+			// A horizontally-scrollable region has to be reachable and scrollable by keyboard
+			// (axe: scrollable-region-focusable). role/aria-label give it an identity once it is
+			// focusable, so it is announced as something meaningful rather than a bare group.
+			tabIndex={0}
+			role="region"
+			aria-label="Scrollable table"
 		>
 			{children}
 		</div>

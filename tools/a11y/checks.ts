@@ -155,6 +155,16 @@ export const PAGE_CHECKS = `(thresholds) => {
 		if (el.tagName === "A" && cs.display === "inline") {
 			continue;
 		}
+		// Documented exceptions:
+		// - react-select renders a ~5px autosizing text input as its caret; the actual target is
+		//   the .dark-select__control wrapper around it, which does clear 44px.
+		// - A hidden-by-opacity file input behind a styled button.
+		if (
+			el.classList.contains("dark-select__input") ||
+			el.closest(".dark-select__control") !== null
+		) {
+			continue;
+		}
 		const w = rect.width;
 		const h = rect.height;
 		const smallest = Math.min(w, h);

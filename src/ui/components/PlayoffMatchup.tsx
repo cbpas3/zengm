@@ -149,7 +149,9 @@ const Team = ({
 
 		return (
 			<a
-				className="ms-auto pe-2 h-100 d-flex align-items-center"
+				// justify-content-end + a min width keeps this a real target: it held a 1-2 digit
+				// score and measured 19x27, under the 24px hard floor.
+				className="ms-auto pe-2 h-100 d-flex align-items-center justify-content-end playoff-matchup-score"
 				href={helpers.leagueUrl([
 					"game_log",
 					`${team.abbrev}_${team.tid}`,

@@ -38,7 +38,11 @@
 	// Single source of truth, replacing the eight hardcoded 52px/60px values documented in
 	// MOBILE_FIRST_ACCESSIBILITY_PLAN.md §1.6. Anything that positions itself relative to the
 	// fixed navbar must read these.
-	--zen-navbar-h: 3.5rem;
+	// Static fallback only — src/ui/hooks/useNavbarHeight.ts overwrites this with the navbar's
+	// measured height as soon as it mounts, because the real height is content-driven (the phase
+	// status block wraps differently per phase) and a fixed guess put content under the navbar.
+	// Kept close to the measured value so the pre-JS first paint barely shifts.
+	--zen-navbar-h: 4.25rem;
 	--zen-sticky-top: var(--zen-navbar-h);
 
 	// Height of the fixed bottom action bar on small screens (0 on desktop, set below).
@@ -48,7 +52,7 @@
 // The navbar needs more room once the horizontal nav links appear at sm and up.
 @include media-breakpoint-up(sm) {
 	:root {
-		--zen-navbar-h: 4rem;
+		--zen-navbar-h: 4.5rem;
 	}
 }
 
@@ -98,11 +102,51 @@ textarea {
 	font-size: max(1rem, 16px);
 }
 
-// Every form control clears the tap floor. Range inputs get a taller thumb area separately.
+// Every form control clears the tap floor in BOTH directions. Height alone is not enough: the
+// baseline audit's most common failure was icon-only controls (`.btn.p-0`, glyph nav links, the
+// season switcher) that were tall enough and ~20px wide.
 .form-control,
 .form-select,
 .btn {
 	min-height: var(--zen-tap-min);
+}
+
+.btn,
+.form-select {
+	min-width: var(--zen-tap-min);
+}
+
+// Icon-only buttons cancel their own padding with .p-0, so centre the glyph in the enforced box
+// instead of letting it sit in a corner.
+.btn.p-0 {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+// The title-bar season/team switcher: a two-character season is otherwise a ~20px-wide target
+select.dropdown-select {
+	min-width: calc(var(--zen-tap-min) + 1.5rem);
+}
+
+// Nav links that contain only a glyph (the account icon, the sidebar toggle, the new-window icon)
+// need width as well as height — the account link measured 41x54.
+.nav-link {
+	min-height: var(--zen-tap-min);
+	min-width: var(--zen-tap-min);
+}
+
+// ---- Link affordance ---------------------------------------------------------------------------
+// The app sets $link-decoration: none globally, so links inside running text are distinguished from
+// body copy by colour alone — WCAG 1.4.1 (axe: link-in-text-block). Underline them where they sit in
+// prose; standalone links in tables, nav and cards keep the clean look.
+p a,
+li a,
+dd a,
+.alert a,
+.settings-description a,
+.help-popover-body a {
+	text-decoration: underline;
 }
 
 // Sliders (Game Plan, Play Through Injuries) are dragged, so they need real vertical room

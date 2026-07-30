@@ -690,7 +690,9 @@ const NextButton = ({
 	);
 
 	return (
-		<div className="ms-4">
+		// ms-4 on a row of nowrap buttons pushed the document 44px wider than a 390px viewport.
+		// The margin is only useful once there is room for it, and the buttons must be able to wrap.
+		<div className="ms-0 ms-sm-4 d-flex flex-wrap gap-2">
 			{boxScore.season === season &&
 			currentGidInList &&
 			(nextGid === undefined || clickedGoToNext || autoGoToNext) &&

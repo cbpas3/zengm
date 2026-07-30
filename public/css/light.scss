@@ -12,8 +12,11 @@ $sorting-highlight-bg: #ececec !default; // Matches var(--bs-table-hover-bg) but
 $link-decoration: none;
 $link-hover-decoration: underline;
 $enable-smooth-scroll: false;
-$badge-padding-y: 0.25em;
-$badge-padding-x: 0.4em;
+$badge-padding-y: 0.3em;
+$badge-padding-x: 0.45em;
+// Bootstrap's default 0.75em resolves to 13.5px against an 18px parent, under the 14px floor.
+// A fixed rem keeps injury/skill badges legible regardless of what they sit inside.
+$badge-font-size: 0.8125rem;
 $popover-body-padding-y: 0.5rem;
 $popover-body-padding-x: 0.75rem;
 $form-select-indicator-padding: 1.1rem;
@@ -1177,7 +1180,8 @@ tr.table-warning:hover > td {
 	}
 }
 
-$league-top-bar-toggle-width: 15px;
+// Was 15px — a 19x27 tap target on the score strip, below the 24px hard floor.
+$league-top-bar-toggle-width: 1.5rem;
 .league-top-bar {
 	padding-right: $league-top-bar-toggle-width;
 
@@ -1190,7 +1194,7 @@ $league-top-bar-toggle-width: 15px;
 	}
 }
 .league-top-bar-safari {
-	margin-right: $league-top-bar-toggle-width + 8px;
+	margin-right: calc($league-top-bar-toggle-width + 0.5rem);
 }
 .league-top-bar-toggle {
 	border-top-right-radius: 0 !important;
@@ -1259,7 +1263,41 @@ $small-scrollbar-thumb-hover-color: darken($gray-500, 10%) !default;
 }
 
 .score-box-score {
-	min-width: 3ch;
+	// Wide enough to be a real tap target; the strip scrolls horizontally so this can't overflow
+	// the document.
+	min-width: var(--zen-tap-min);
+}
+
+// The win/loss score boxes paint .alert-success / .alert-danger as a background, but their text
+// inherited the body colour rather than the alert's own foreground, which axe flagged as a contrast
+// failure on every league page (the score strip renders on all of them). Bootstrap's alert
+// components already compute an accessible pairing, so use it.
+.alert-bg-color {
+	color: var(--bs-alert-color, inherit);
+
+	a {
+		color: var(--bs-alert-link-color, var(--bs-alert-color, inherit));
+	}
+}
+
+// Score-box links are the box score / roster targets on the busiest strip in the app
+.score-box-score a,
+.score-box-left-wrapper a {
+	display: flex;
+	align-items: center;
+	justify-content: inherit;
+	min-height: var(--zen-tap-min);
+}
+
+.score-box-team-link {
+	display: flex;
+	align-items: center;
+	min-height: var(--zen-tap-min);
+	min-width: var(--zen-tap-min);
+}
+
+.playoff-matchup-score {
+	min-width: var(--zen-tap-min);
 }
 
 .score-box-action {
@@ -1293,15 +1331,52 @@ $small-scrollbar-thumb-hover-color: darken($gray-500, 10%) !default;
 
 // The old `margin-top: 3px` was a hack for the 13px $font-size-base. With a 1rem base Bootstrap's
 // own em-based alignment is correct, and the box itself needs to be big enough to hit.
+// 1.25em resolves to 22.5px at the 18px scale, under the 24px hard floor. 1.5em clears it at every
+// scale, and giving the whole .form-check row the tap height makes the label part of the target.
 .form-check-input {
-	width: 1.25em;
-	height: 1.25em;
-	margin-top: 0.15em;
+	width: 1.5em;
+	height: 1.5em;
+	margin-top: 0.05em;
+}
+
+.form-check {
+	min-height: var(--zen-tap-min);
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+// Switches keep the wider pill shape set at the top of this file
+.form-switch .form-check-input {
+	height: 1.5rem !important;
 }
 
 // darken($yellow, 10%) is roughly 2:1 on white. Warning text has to be readable, not just yellow.
 .text-warning {
 	color: darken($yellow, 30%) !important;
+}
+
+// Bootstrap's info cyan is ~2.3:1 on white and was the largest single remaining axe contrast
+// source. Same treatment as .text-warning above.
+.text-info {
+	color: darken($cyan, 25%) !important;
+}
+
+// ---- Narrow-screen overflow guards -----------------------------------------------------------
+// A <select> sizes itself to its longest <option>, which on the Settings page pushed the document
+// 3px past a 390px viewport. Never let one out-grow its container.
+select,
+.form-select {
+	max-width: 100%;
+}
+
+// .btn-group is inline-flex with nowrap children, so a group of three labelled buttons overflows a
+// phone. Let it wrap below sm: the joined border radii look slightly off at the wrap point, which is
+// a fair trade against the row running off the side of the screen.
+@include media-breakpoint-down(sm) {
+	.btn-group {
+		flex-wrap: wrap;
+	}
 }
 
 .badge-news {

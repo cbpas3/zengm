@@ -7,6 +7,7 @@ import DropdownLinks from "../DropdownLinks.tsx";
 import LogoAndText from "../LogoAndText.tsx";
 import PlayMenu from "../PlayMenu.tsx";
 import { menuItems } from "../../util/menuItems.tsx";
+import { useNavbarHeight } from "../../hooks/useNavbarHeight.ts";
 
 const PhaseStatusBlock = () => {
 	const { liveGameInProgress, phase, phaseText, statusText } = useLocalPartial([
@@ -89,6 +90,10 @@ export const NavBar = ({ updating }: { updating: boolean }) => {
 	]);
 	const viewInfo = useViewData();
 
+	// Publishes the navbar's measured height as --zen-navbar-h. Called before the `popup` early
+	// return so the hook order is stable.
+	const navbarRef = useNavbarHeight();
+
 	// Checking lid too helps with some flicker
 	const inLeague = viewInfo?.inLeague && lid !== undefined;
 
@@ -114,6 +119,7 @@ export const NavBar = ({ updating }: { updating: boolean }) => {
 			expand="sm"
 			fixed="top"
 			className="navbar-border flex-nowrap"
+			ref={navbarRef}
 		>
 			<div className="container-fluid">
 				<button

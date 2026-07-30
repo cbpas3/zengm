@@ -609,7 +609,10 @@ const SettingsForm = ({
 				/>
 
 				<StickyBottomButtons isInsideModal={isInsideModal}>
-					<div className="d-flex justify-content-between w-100">
+					{/* flex-wrap: three nowrap items (God Mode toggle, filter, Save) totalled ~410px
+					    and were the only source of document-level horizontal overflow in the
+					    baseline audit. They now wrap onto a second line on narrow screens. */}
+					<div className="d-flex justify-content-between w-100 flex-wrap gap-2">
 						{!hideGodModeToggle ? (
 							<div className="btn-group">
 								<button
@@ -638,9 +641,9 @@ const SettingsForm = ({
 
 						<input
 							type="text"
-							className="form-control mx-3"
+							className="form-control flex-grow-1 mx-0 mx-sm-3"
 							placeholder="Filter settings..."
-							style={{ maxWidth: 300 }}
+							style={{ maxWidth: 300, minWidth: 140 }}
 							value={filterText}
 							onChange={(event) => {
 								setFilterText(event.target.value);
