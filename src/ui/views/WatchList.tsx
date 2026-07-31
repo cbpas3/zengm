@@ -302,6 +302,8 @@ const WatchList = ({
 				name="WatchList"
 				pagination
 				rows={rows}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0, 1], controls: [cols.length - 1] }}
 			/>
 		</>
 	);

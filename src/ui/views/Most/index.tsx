@@ -201,6 +201,8 @@ const Most = ({
 				name={`Most_${type}`}
 				rows={rows}
 				superCols={superCols}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0, 1] }}
 			/>
 		</>
 	);

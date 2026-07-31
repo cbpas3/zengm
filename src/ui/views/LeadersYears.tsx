@@ -120,6 +120,8 @@ const LeadersYears = ({
 					name="LeadersYears"
 					pagination={rows.length > 100}
 					rows={rows}
+					mobileLayout="roster"
+					rosterBands={{ identity: [0] }}
 				/>
 			)}
 		</>

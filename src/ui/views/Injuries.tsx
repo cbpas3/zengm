@@ -110,6 +110,8 @@ const Injuries = ({
 					name="Injuries"
 					pagination
 					rows={rows}
+					mobileLayout="roster"
+					rosterBands={{ identity: [0] }}
 				/>
 			) : (
 				<p>No injured players found.</p>

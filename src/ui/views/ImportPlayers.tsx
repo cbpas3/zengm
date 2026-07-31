@@ -477,6 +477,8 @@ export const ImportPlayersInner = ({
 						rows={rows}
 						controlledSelectedRows={selectedRows}
 						alwaysShowBulkSelectRows
+						mobileLayout="roster"
+						rosterBands={{ identity: [0, 1, 2], controls: [6, 7, 8, 9] }}
 					/>
 
 					<div className="form-check mt-3">

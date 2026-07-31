@@ -283,6 +283,8 @@ const AllStarHistory = ({ allAllStars, userTid }: View<"allStarHistory">) => {
 				name="AllStarHistory"
 				pagination={pagination}
 				rows={rows}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0, 1] }}
 			/>
 		</>
 	);

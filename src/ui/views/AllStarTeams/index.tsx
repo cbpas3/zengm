@@ -129,12 +129,20 @@ const PlayersTable = ({
 			};
 		});
 
+	// Mirrors the same conditional unshift() calls used to build colNames/data above.
+	const nameIndex = (name !== "Remaining" ? 1 : 0) + (showDraftCol ? 1 : 0);
+
 	return (
 		<DataTable
 			cols={cols}
 			defaultSort={[0, "asc"]}
 			name={`AllStarDraft:${name}`}
 			rows={rows}
+			mobileLayout="roster"
+			rosterBands={{
+				identity: name !== "Remaining" ? [0, nameIndex] : [nameIndex],
+				controls: showDraftCol ? [0] : [],
+			}}
 		/>
 	);
 };

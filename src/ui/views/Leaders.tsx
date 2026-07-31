@@ -187,6 +187,8 @@ const Leaders = ({
 									name={`LeagueLeaders_${cat.stat}`}
 									pagination
 									rows={rows}
+									mobileLayout="roster"
+									rosterBands={{ identity: [0, 1] }}
 									title={
 										<h3 title={desc}>
 											{title} ({statCol.title})

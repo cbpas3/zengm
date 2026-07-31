@@ -209,6 +209,8 @@ const NegotiationList = ({
 				defaultSort={[10, "desc"]}
 				name="NegotiationList"
 				rows={rows}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0], controls: [cols.length - 1] }}
 			/>
 		</>
 	);

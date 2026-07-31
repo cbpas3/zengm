@@ -112,6 +112,8 @@ const AwardsRecords = ({
 				name="AwardsRecords"
 				rows={rows}
 				pagination
+				mobileLayout="roster"
+				rosterBands={{ identity: [0] }}
 			/>
 		</>
 	);

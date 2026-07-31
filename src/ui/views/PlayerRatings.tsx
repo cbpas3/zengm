@@ -152,6 +152,8 @@ const PlayerRatings = ({
 				name="PlayerRatings"
 				pagination
 				rows={rows}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0] }}
 			/>
 		</>
 	);

@@ -27,6 +27,7 @@ const Notes = (props: View<"notes">) => {
 	let moreLinks;
 	let cols;
 	let rows;
+	let rosterBands: { identity: number[]; controls?: number[] } | undefined;
 
 	if (props.type === "draftPick") {
 		const { challengeNoRatings, draftPicks, draftType } = props;
@@ -223,6 +224,11 @@ const Notes = (props: View<"notes">) => {
 				</button>,
 			);
 		}
+
+		rosterBands = {
+			identity: [0, 1],
+			controls: [cols.length - 2, cols.length - 1],
+		};
 	} else if (props.type === "teamSeason") {
 		const { teams, ties, otl, usePts, userTid } = props;
 
@@ -365,6 +371,8 @@ const Notes = (props: View<"notes">) => {
 						name={`Notes${props.type}`}
 						pagination
 						rows={rows}
+						mobileLayout={rosterBands ? "roster" : undefined}
+						rosterBands={rosterBands}
 					/>
 				</>
 			) : null}

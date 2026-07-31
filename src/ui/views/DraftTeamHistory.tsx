@@ -184,6 +184,8 @@ const DraftTeamHistory = ({
 				rows={rows}
 				superCols={superCols}
 				pagination
+				mobileLayout="roster"
+				rosterBands={{ identity: [5] }}
 			/>
 		</>
 	);

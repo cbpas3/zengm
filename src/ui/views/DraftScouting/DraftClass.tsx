@@ -168,6 +168,8 @@ const DraftClass = ({
 				defaultSort={[0, "asc"]}
 				name={`DraftScouting:${offset}`}
 				rows={rows}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0, 1] }}
 			/>
 		</>
 	);

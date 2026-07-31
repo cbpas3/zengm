@@ -1058,6 +1058,8 @@ const TeamFinances = ({
 				nonfluid
 				footer={footer}
 				rows={rows}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0, 1] }}
 			/>
 		</>
 	);

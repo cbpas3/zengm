@@ -141,6 +141,8 @@ const UpcomingFreeAgents = ({
 				rows={rows}
 				pagination
 				superCols={superCols}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0] }}
 			/>
 		</>
 	);

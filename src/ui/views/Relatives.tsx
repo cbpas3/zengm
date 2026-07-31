@@ -171,6 +171,8 @@ const Relatives = ({
 				pagination
 				rows={rows}
 				superCols={superCols}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0] }}
 			/>
 		</>
 	);

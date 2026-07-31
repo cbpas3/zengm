@@ -106,6 +106,8 @@ const HallOfFame = ({ players, stats, userTid }: View<"hallOfFame">) => {
 				pagination
 				rows={rows}
 				superCols={superCols}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0] }}
 			/>
 		</>
 	);

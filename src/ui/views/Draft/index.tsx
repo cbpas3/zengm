@@ -131,6 +131,10 @@ const Draft = ({
 		colsUndrafted.splice(3, 0, ...getCols(["Team"]));
 	}
 
+	// Draft/Sim buttons always end up as the last column, however many stat/Team columns got
+	// spliced in above.
+	const undraftedControlIndex = colsUndrafted.length - 1;
+
 	const rowsUndrafted: DataTableRow[] = undrafted.map((p) => {
 		const data = [
 			p.rank,
@@ -218,6 +222,9 @@ const Draft = ({
 		colsDrafted.splice(4, 1);
 		colsDrafted.splice(2, 0, getCol("From"));
 	}
+
+	// [Pick, Team, (From,) Name/pick-button]
+	const draftedIdentityIndexes = expansionDraft ? [0, 1, 2, 3] : [0, 1, 2];
 
 	const teamInfoCache = useLocal((state) => state.teamInfoCache);
 
@@ -521,6 +528,11 @@ const Draft = ({
 						name="Draft:Undrafted"
 						pagination={rowsDrafted.length > 100}
 						rows={rowsUndrafted}
+						mobileLayout="roster"
+						rosterBands={{
+							identity: [0, 1],
+							controls: [undraftedControlIndex],
+						}}
 					/>
 				</div>
 				<div className={draftedColClasses} id="table-draft-results">
@@ -553,6 +565,8 @@ const Draft = ({
 						name="Draft:Drafted"
 						pagination={sortableRows ? false : rowsDrafted.length > 100}
 						rows={rowsDrafted}
+						mobileLayout="roster"
+						rosterBands={{ identity: draftedIdentityIndexes }}
 						sortableRows={
 							sortableRows
 								? {

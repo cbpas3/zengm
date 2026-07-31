@@ -247,6 +247,8 @@ const PlayerStats = ({
 				rows={rows}
 				superCols={superCols}
 				pagination
+				mobileLayout="roster"
+				rosterBands={{ identity: [0] }}
 			/>
 		</>
 	);

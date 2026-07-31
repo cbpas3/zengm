@@ -84,6 +84,10 @@ const Player = ({
 	canMoveUp: boolean;
 	canMoveDown: boolean;
 }) => {
+	// row.rowLabel is only used by table mode's showRowLabels <td> (Row.tsx) - carried over here too,
+	// otherwise a view like Depth.tsx (batting order slot, pitcher role) would silently lose it on
+	// mobile since neither this nor MobileCards previously rendered it.
+	const rowLabel = row.rowLabel;
 	const { showBulkSelectCheckboxes, sortBys, isFiltered } = use(DataTableContext);
 
 	let classNames;
@@ -123,6 +127,7 @@ const Player = ({
 				{showBulkSelectCheckboxes && row.metadata ? (
 					<RowCheckbox rowKey={row.key} metadata={row.metadata} />
 				) : null}
+				{rowLabel ? <div className="dt-roster-rowlabel">{rowLabel}</div> : null}
 				{badge ? <div className="dt-roster-badge">{badge}</div> : null}
 				{avatar ? <div className="dt-roster-avatar">{avatar}</div> : null}
 				<div className="dt-roster-names">
