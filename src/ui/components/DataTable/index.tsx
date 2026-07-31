@@ -59,6 +59,7 @@ export type Col = {
 	title: string;
 	titleReact?: ReactNode;
 	width?: string;
+	defaultHidden?: boolean;
 
 	// Lower = more important. Used only by the mobile card layout (MobileCards.tsx) to decide which
 	// columns show before the "Show all N" disclosure. Defaults to the column's display index, so a
@@ -797,36 +798,36 @@ export const DataTable = ({
 							)}
 						</DataTableContext>
 					) : (
-					<ResponsiveTableWrapper
-						className={clsx(
-							classNameWrapper,
-							pagination ? "fix-margin-pagination" : null,
-						)}
-						nonfluid={nonfluid}
-						ref={responsiveTableWrapperRef}
-					>
-						{sortableRows ? (
-							<SortableContextWrappers
-								{...sortableRows}
-								renderRow={(renderRowProps) => {
-									const row = renderRowProps.row;
-									return (
-										<Row
-											key={row.key}
-											row={row}
-											sortableRows={renderRowProps}
-										/>
-									);
-								}}
-								rows={rows}
-								tableRef={tableRef}
-							>
-								{table}
-							</SortableContextWrappers>
-						) : (
-							table
-						)}
-					</ResponsiveTableWrapper>
+						<ResponsiveTableWrapper
+							className={clsx(
+								classNameWrapper,
+								pagination ? "fix-margin-pagination" : null,
+							)}
+							nonfluid={nonfluid}
+							ref={responsiveTableWrapperRef}
+						>
+							{sortableRows ? (
+								<SortableContextWrappers
+									{...sortableRows}
+									renderRow={(renderRowProps) => {
+										const row = renderRowProps.row;
+										return (
+											<Row
+												key={row.key}
+												row={row}
+												sortableRows={renderRowProps}
+											/>
+										);
+									}}
+									rows={rows}
+									tableRef={tableRef}
+								>
+									{table}
+								</SortableContextWrappers>
+							) : (
+								table
+							)}
+						</ResponsiveTableWrapper>
 					)}
 					{!hideAllControls && pagination ? (
 						<div className="d-flex align-items-center flex-wrap">

@@ -91,6 +91,7 @@ const loadStateFromCache = ({
 	if (!colOrder) {
 		colOrder = cols.map((col, i) => ({
 			colIndex: i,
+			hidden: col?.defaultHidden ? true : undefined,
 		}));
 	}
 	if (colOrder.length < cols.length) {
@@ -99,6 +100,7 @@ const loadStateFromCache = ({
 			if (!colOrder.some((x: any) => x && x.colIndex === i)) {
 				colOrder.push({
 					colIndex: i,
+					hidden: cols[i]?.defaultHidden ? true : undefined,
 				});
 			}
 		}

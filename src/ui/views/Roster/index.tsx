@@ -19,6 +19,7 @@ import type {
 } from "../../../common/types.ts";
 import { wrappedContract } from "../../components/contract.tsx";
 import type {
+	Col,
 	DataTableRow,
 	SortBy,
 } from "../../components/DataTable/index.tsx";
@@ -181,86 +182,108 @@ const Roster = ({
 	const colIndexesFor = (keys: string[]) =>
 		keys.map((key) => colKeys.indexOf(key)).filter((i) => i !== -1);
 
-	const cols = getCols(
-		colKeys,
-		{
-			Country: {
-				title: "",
-				desc: "Country",
-			},
-			PT: {
-				titleReact: (
-					<>
-						PT{" "}
-						<HelpPopover title="Playing time modifier">
-							<p>
-								Your coach will divide up playing time based on ability and
-								stamina. If you want to influence{" "}
-								{helpers.pronoun(gender, "his")} judgement, your options are:
-							</p>
-							<p>
-								<span style={ptStyles["0"]}>0 No Playing Time</span>
-								<br />
-								<span style={ptStyles["0.75"]}>- Less Playing Time</span>
-								<br />
-								<span style={ptStyles["1"]}>
-									&nbsp;&nbsp;&nbsp; Let Coach Decide
-								</span>
-								<br />
-								<span style={ptStyles["1.25"]}>+ More Playing Time</span>
-								<br />
-								<span style={ptStyles["1.5"]}>++ Even More Playing Time</span>
-							</p>
-						</HelpPopover>
-					</>
-				),
-			},
-			Mood: {
-				titleReact: (
-					<>
-						Mood{" "}
-						<HelpPopover title="Player mood">
-							See{" "}
-							<a
-								href={`https://${WEBSITE_ROOT}/manual/player-mood/`}
-								target="_blank"
-							>
-								the manual
-							</a>{" "}
-							for more info about player mood.
-						</HelpPopover>
-					</>
-				),
-			},
-			Release: {
-				titleReact: (
-					<>
-						Release{" "}
-						<HelpPopover title="Release player">
-							<p>
-								To free up a roster spot, you can release a player from your
-								team. You will still have to pay{" "}
-								{helpers.pronoun(gender, "his")} salary (and have it count
-								against the salary cap) until {helpers.pronoun(gender, "his")}{" "}
-								contract expires (you can view your released players' contracts
-								in your{" "}
-								<a href={helpers.leagueUrl(["team_finances"])}>Team Finances</a>
-								).
-							</p>
-							{salaryCapType === "soft" ? (
-								<p>
-									However, if you just drafted a player and the regular season
-									has not started yet, {helpers.pronoun(gender, "his")} contract
-									is not guaranteed and you can release{" "}
-									{helpers.pronoun(gender, "him")} for free.
-								</p>
-							) : null}
-						</HelpPopover>
-					</>
-				),
-			},
+	const defaultVisibleKeys = new Set([
+		"Name",
+		"Pos",
+		"Ovr",
+		"stat:min",
+		"stat:pts",
+		"stat:trb",
+		"stat:ast",
+		"PT",
+		"Dev",
+		"Mood",
+		"Release",
+		"Trade",
+	]);
+
+	const rosterOverrides: Record<string, Partial<Col>> = {
+		Country: {
+			title: "",
+			desc: "Country",
 		},
-	);
+		PT: {
+			titleReact: (
+				<>
+					PT{" "}
+					<HelpPopover title="Playing time modifier">
+						<p>
+							Your coach will divide up playing time based on ability and
+							stamina. If you want to influence {helpers.pronoun(gender, "his")}{" "}
+							judgement, your options are:
+						</p>
+						<p>
+							<span style={ptStyles["0"]}>0 No Playing Time</span>
+							<br />
+							<span style={ptStyles["0.75"]}>- Less Playing Time</span>
+							<br />
+							<span style={ptStyles["1"]}>
+								&nbsp;&nbsp;&nbsp; Let Coach Decide
+							</span>
+							<br />
+							<span style={ptStyles["1.25"]}>+ More Playing Time</span>
+							<br />
+							<span style={ptStyles["1.5"]}>++ Even More Playing Time</span>
+						</p>
+					</HelpPopover>
+				</>
+			),
+		},
+		Mood: {
+			titleReact: (
+				<>
+					Mood{" "}
+					<HelpPopover title="Player mood">
+						See{" "}
+						<a
+							href={`https://${WEBSITE_ROOT}/manual/player-mood/`}
+							target="_blank"
+						>
+							the manual
+						</a>{" "}
+						for more info about player mood.
+					</HelpPopover>
+				</>
+			),
+		},
+		Release: {
+			titleReact: (
+				<>
+					Release{" "}
+					<HelpPopover title="Release player">
+						<p>
+							To free up a roster spot, you can release a player from your team.
+							You will still have to pay {helpers.pronoun(gender, "his")} salary
+							(and have it count against the salary cap) until{" "}
+							{helpers.pronoun(gender, "his")} contract expires (you can view
+							your released players' contracts in your{" "}
+							<a href={helpers.leagueUrl(["team_finances"])}>Team Finances</a>
+							).
+						</p>
+						{salaryCapType === "soft" ? (
+							<p>
+								However, if you just drafted a player and the regular season has
+								not started yet, {helpers.pronoun(gender, "his")} contract is
+								not guaranteed and you can release{" "}
+								{helpers.pronoun(gender, "him")} for free.
+							</p>
+						) : null}
+					</HelpPopover>
+				</>
+			),
+		},
+	};
+
+	for (const key of colKeys) {
+		if (!defaultVisibleKeys.has(key)) {
+			rosterOverrides[key] = {
+				...rosterOverrides[key],
+				defaultHidden: true,
+			};
+		}
+	}
+
+	const cols = getCols(colKeys, rosterOverrides);
 
 	// Sort by pos for non-basketball sports
 	const defaultSortCol = 1;
@@ -544,13 +567,7 @@ const Roster = ({
 				mobileLayout="roster"
 				rosterBands={{
 					identity: colIndexesFor(["Name", "Pos"]),
-					controls: colIndexesFor([
-						"PT",
-						"Dev",
-						"Mood",
-						"Release",
-						"Trade",
-					]),
+					controls: colIndexesFor(["PT", "Dev", "Mood", "Release", "Trade"]),
 				}}
 				rosterBadge={(row, index) => {
 					// Mirrors the drag-handle highlight the table uses for starters
@@ -565,10 +582,10 @@ const Roster = ({
 						return null;
 					}
 					// Deliberately not `lazy`: facesjs's lazy mode renders an empty placeholder until the
-						// element intersects, and inside this layout's sticky/overflow container the
-						// observer doesn't fire reliably - the first screenful stayed blank. A roster is
-						// ~15 faces, which measured fine rendered eagerly.
-						return <PlayerPicture face={p.face} imgURL={p.imgURL} />;
+					// element intersects, and inside this layout's sticky/overflow container the
+					// observer doesn't fire reliably - the first screenful stayed blank. A roster is
+					// ~15 faces, which measured fine rendered eagerly.
+					return <PlayerPicture face={p.face} imgURL={p.imgURL} />;
 				}}
 				sortableRows={
 					editable
