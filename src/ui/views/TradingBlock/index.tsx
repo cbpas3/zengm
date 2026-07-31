@@ -464,6 +464,11 @@ export const OfferTable = ({
 		return null;
 	}
 
+	// [SaveTrade icon, Team] on line 1; Actions (Negotiate/Remove) as its own control line;
+	// everything else (record, strategy, ovr changes, embedded players/picks, cap, warning) falls
+	// through to the aligned stat strip.
+	const actionsIndex = offerCols.length - 1;
+
 	return (
 		<DataTable
 			className="align-top-all"
@@ -473,6 +478,8 @@ export const OfferTable = ({
 			name={`TradingBlock:Offers`}
 			rows={offerRows}
 			small={false}
+			mobileLayout="roster"
+			rosterBands={{ identity: [0, 1], controls: [actionsIndex] }}
 		/>
 	);
 };

@@ -151,6 +151,8 @@ const LeadersProgressive = ({
 					nonfluid
 					pagination={rows.length > 100}
 					rows={rows}
+					mobileLayout="roster"
+					rosterBands={{ identity: [0] }}
 				/>
 			)}
 		</>

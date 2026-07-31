@@ -144,6 +144,8 @@ const HistoryAll = ({ awards, seasons, userTid }: View<"historyAll">) => {
 				name="HistoryAll"
 				pagination
 				rows={rows}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0] }}
 			/>
 		</>
 	);
