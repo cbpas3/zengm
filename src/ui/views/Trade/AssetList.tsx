@@ -11,6 +11,7 @@ import { wrappedPlayerNameLabels } from "../../components/PlayerNameLabels.tsx";
 import type { HandleToggle } from "./index.tsx";
 import { range } from "../../../common/utils.ts";
 import { SafeHtml } from "../../components/SafeHtml.tsx";
+import { PlayerPicture } from "../../components/PlayerPicture.tsx";
 
 type HandleBulk = (
 	type: "check" | "clear",
@@ -152,6 +153,9 @@ const AssetList = ({
 	stats: Stats;
 	userOrOther: UserOrOther;
 }) => {
+	// Row keys are pids, so this resolves a row back to its player for the headshot
+	const playersByPid = new Map(roster.map((p) => [p.pid, p]));
+
 	const playerCols = getCols(
 		[
 			"",
@@ -224,6 +228,22 @@ const AssetList = ({
 					defaultStickyCols={window.mobile ? 2 : 3}
 					name={`Trade:${userOrOtherKey}`}
 					rows={playerRows}
+					// Yahoo-style rows on mobile. Line 1 keeps both trade checkboxes (include /
+					// exclude-from-counter-offers) next to the name, since those are the whole point
+					// of this table; ratings and stats fall through to the aligned strip.
+					mobileLayout="roster"
+					rosterBands={{ identity: [0, 1, 2, 3] }}
+					rosterAvatar={(row) => {
+						const p = playersByPid.get(row.key as number);
+						if (!p) {
+							return null;
+						}
+// Deliberately not `lazy`: facesjs's lazy mode renders an empty placeholder until the
+						// element intersects, and inside this layout's sticky/overflow container the
+						// observer doesn't fire reliably - the first screenful stayed blank. A roster is
+						// ~15 faces, which measured fine rendered eagerly.
+						return <PlayerPicture face={p.face} imgURL={p.imgURL} />;
+					}}
 				/>
 			</div>
 			<div className="col-xl-3">

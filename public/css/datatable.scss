@@ -289,3 +289,227 @@ table.table thead .sorting_desc_disabled {
 		grid-template-columns: repeat(3, 1fr);
 	}
 }
+
+// ---- Roster-row layout (Yahoo Fantasy style) ---------------------------------------------------
+// Rendered by DataTable/RosterRows.tsx below `md` when a view passes mobileLayout="roster".
+// Two lines per player: a pinned identity line, then a stat strip aligned to a shared header.
+//
+// Class names appear as literals in RosterRows.tsx so PurgeCSS keeps them - never build them
+// dynamically. See MOBILE_FIRST_ACCESSIBILITY_PLAN.md §1.3.
+.dt-roster {
+	margin-bottom: 1rem;
+}
+
+// The one horizontal scroller: header and every stat strip live inside it, so they scroll together
+// and stay aligned. The identity line is sticky-left within it, so it stays put while stats scroll.
+.dt-roster-scroll {
+	overflow-x: auto;
+	overflow-y: hidden;
+	border-top: 1px solid $border-color;
+}
+
+// One grid holds the header cells AND every player's values, so all of them share a single set of
+// column tracks. With separate grids per row the tracks sized independently, and a wide value (a
+// contract like "$42.44M thru 2026") either overflowed or wrapped mid-token while the header above
+// it stayed narrow. `auto` tracks let each column take the width its widest cell actually needs.
+.dt-roster-grid {
+	display: grid;
+	grid-template-columns: repeat(var(--dt-roster-cols), minmax(4rem, auto));
+	align-items: stretch;
+}
+
+.dt-roster-th {
+	// A real button so the column is keyboard-focusable and announced as sortable.
+	// Order matters here: the background/border resets must come BEFORE the values we want, or they
+	// silently wipe them and rows scroll through the "transparent" sticky header.
+	border: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: sticky;
+	top: var(--zen-sticky-top);
+	z-index: 3;
+	background-color: $body-bg;
+	border-bottom: 2px solid $border-color;
+	min-height: var(--zen-tap-min);
+	padding: 0.25rem;
+	color: var(--bs-secondary-color);
+	font-size: var(--zen-fs-sm);
+	font-weight: 600;
+	text-align: center;
+	white-space: nowrap;
+
+	&:disabled {
+		opacity: 1; // Unsortable is not "disabled-looking", it just doesn't respond
+		cursor: default;
+	}
+}
+
+.dt-roster-th-sorted {
+	color: var(--bs-primary);
+}
+
+// No box of its own: its children (identity / stat cells / controls) become direct grid items so
+// they line up with the header. Row tinting is therefore applied to those children, not here.
+.dt-roster-player {
+	display: contents;
+}
+
+.dt-roster-identity {
+	grid-column: 1 / -1;
+	// Sticky+left means this is also what the user sees while the stat strip is scrolled sideways,
+	// so it has to stay legible at the narrowest point.
+	border-top: 1px solid $border-color;
+	background-color: $body-bg;
+	// Above the stat cells when the strip is scrolled sideways, below the sticky header
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	// Pinned so the player stays identifiable while the stat strip scrolls sideways. The width is
+	// set inline from the scroll container's clientWidth (see useElementWidth) because CSS cannot
+	// express "as wide as my scroll container's visible area".
+	position: sticky;
+	left: 0;
+	padding: 0.5rem 0.5rem 0.25rem;
+	min-height: var(--zen-tap-min);
+	// Never let a long name push the line wider than its measured width
+	overflow: hidden;
+}
+
+.dt-roster-check {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: var(--zen-tap-min);
+	min-height: var(--zen-tap-min);
+	margin: 0;
+	cursor: pointer;
+}
+
+.dt-roster-badge {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	min-width: 2.25rem;
+	min-height: 2.25rem;
+	border: 2px solid var(--bs-primary);
+	border-radius: 50%;
+	color: var(--bs-primary);
+	font-size: var(--zen-fs-sm);
+	font-weight: 600;
+}
+
+.dt-roster-avatar {
+	flex-shrink: 0;
+	width: 2.5rem;
+	height: 2.5rem;
+	border-radius: 50%;
+	overflow: hidden;
+	background-color: $gray-200;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+
+	// facesjs renders a 2:3 portrait; scale it up and crop to the head so it reads as a headshot
+	// rather than a tiny full-body figure.
+	svg,
+	img {
+		width: 150%;
+		height: auto;
+		margin-top: -8%;
+	}
+}
+
+.dt-roster-names {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 0 0.5rem;
+	min-width: 0;
+	flex: 1 1 auto;
+	font-size: var(--zen-fs-lg);
+	font-weight: 600;
+
+	// Everything after the first identity cell is supporting detail (position, team)
+	.dt-roster-name-part:not(:first-child) {
+		font-size: var(--zen-fs-sm);
+		font-weight: 400;
+		color: var(--bs-secondary-color);
+	}
+}
+
+// Reorder buttons stay on line 1 (they're small and belong next to the player)
+.dt-roster-reorder {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+	margin-left: auto;
+	flex-shrink: 0;
+}
+
+// Interactive controls (PT / Dev / Mood / Release / Trade) get their own line, pinned to the same
+// width as the identity line so they don't scroll with the stat strip. They're full widgets, not
+// inline chips, so they wrap.
+.dt-roster-controls {
+	grid-column: 1 / -1;
+	position: sticky;
+	left: 0;
+	background-color: $body-bg;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.375rem;
+	padding: 0 0.5rem 0.5rem;
+	overflow: hidden;
+}
+
+.dt-roster-control {
+	min-width: 0;
+	max-width: 100%;
+}
+
+// Reorder buttons replacing drag-to-reorder in this layout
+.dt-roster-move {
+	// Still clears the 44px tap floor vertically; narrower horizontally so line 1 keeps enough room
+	// for the player's name rather than wrapping it onto two lines.
+	min-width: 2.25rem;
+	min-height: var(--zen-tap-min);
+	padding: 0 0.25rem;
+	line-height: 1;
+}
+
+
+
+.dt-roster-stat {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.125rem 0.5rem 0.5rem;
+	font-size: var(--zen-fs-body);
+	font-variant: tabular-nums;
+	text-align: center;
+	min-width: 0;
+	// Wrap rather than overflow. Contract cells ("$26.62M thru 2030") are far wider than a numeric
+	// column, and nowrap made them spill across their neighbours.
+	//
+	// break-word, NOT anywhere: `anywhere` participates in intrinsic min-content sizing, so an
+	// `auto` grid track would collapse to a single character and stack the text vertically.
+	white-space: normal;
+	overflow-wrap: break-word;
+	// Opaque so rows scroll under the sticky header instead of showing through it
+	background-color: $body-bg;
+}
+
+.dt-roster-span {
+	grid-column: 1 / -1;
+	padding: 1rem 0.5rem;
+	text-align: center;
+
+	> div {
+		position: sticky;
+		left: 0;
+	}
+}

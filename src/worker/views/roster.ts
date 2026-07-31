@@ -198,6 +198,11 @@ const updateRoster = async (
 			"mood",
 			"value",
 			"awards",
+
+			// Headshots for the mobile roster-row layout (DataTable/RosterRows.tsx). imgURL is the
+			// real-player photo when a league has one; face is the generated portrait fallback.
+			"face",
+			"imgURL",
 		]; // tid and draft are used for checking if a player can be released without paying his salary
 
 		const ratings = ["ovr", "pot", "dovr", "dpot", "skills", "pos", "ovrs"];

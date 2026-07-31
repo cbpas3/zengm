@@ -995,6 +995,45 @@ toggle.
   editable, Depth, ScheduleEditor, FantasyDraft, Draft), because drag-to-reorder is a table
   interaction. Those keep their horizontally-scrolling table on mobile.
 
+### DataTable roster-row layout (Yahoo Fantasy style)
+
+The card layout above is generic but reads poorly for rosters: every player's numbers land at a
+different vertical position, so you can't compare two players at a glance. `DataTable/RosterRows.tsx`
+is a second mobile layout, modelled on the Yahoo Fantasy app — a shared column-header strip, then per
+player a block: identity line (slot badge, headshot, Name cell, reorder buttons), an aligned stat
+row, and an optional controls line.
+
+Opt in per view with `mobileLayout="roster"` + `rosterBands={{ identity: [...], controls: [...] }}`
+(indices into `cols`; anything unlisted becomes a stat column). Wired on **Roster**
+(`views/Roster/index.tsx`) and **Trade** (`views/Trade/AssetList.tsx`, players table only — the picks
+table keeps cards).
+
+Four things worth knowing before touching it:
+
+- **It's one CSS grid, not one grid per row.** Header cells and every player's stat cells are direct
+  children of a single `.dt-roster-grid`; `.dt-roster-player` is `display: contents`. With separate
+  grids the tracks sized independently and a wide value (a contract) either overflowed its column or
+  wrapped mid-token while the header stayed narrow. Consequence: the player wrapper has no box, so
+  row tinting (Trade's `table-danger`/`table-success`) is applied to each child instead.
+- **`overflow-wrap: break-word`, never `anywhere`,** on `.dt-roster-stat`. `anywhere` participates in
+  intrinsic min-content sizing, which collapses an `auto` grid track to one character and stacks the
+  text vertically.
+- **Reordering is buttons, not drag.** dnd-kit's handle renders a `<td>` and its overlay measures
+  `tbody` cell widths, so `sortableRows` can't cross into this layout. `RosterRows` renders ▲/▼
+  calling the same `sortableRows.onSwap`, and only when sorting is off (otherwise display index
+  wouldn't match roster index). For a reduced-motor-precision user this is the better affordance
+  anyway. Unlike card mode, roster mode therefore does *not* fall back to the table when
+  `sortableRows` is set — which matters, because the editable roster is the page this exists for.
+- **Headshots are rendered eagerly.** `PlayerPicture` is passed no `lazy`: facesjs's lazy mode draws
+  an empty placeholder until the element intersects, and inside this layout's sticky/overflow
+  container the observer didn't fire — the first screenful stayed blank. ~15 faces measured ~800ms
+  to first render. `face`/`imgURL` had to be added to the player attrs in `worker/views/roster.ts`
+  and `worker/views/trade.ts`; they weren't previously sent to either view.
+
+Known rough edge: the Roster page's block is tall, because its Dev/Mood/PT/Release/Trade controls are
+full widgets (Dev alone is a checkbox + archetype select + work-ethic badges) and need their own
+line. Putting them behind a per-row disclosure would be the next improvement.
+
 ### Hover-only information
 
 Column definitions lived only in `title={desc}` on the `<th>` — a native tooltip, unreachable on
