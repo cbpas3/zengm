@@ -66,6 +66,7 @@ const Players = ({
 			},
 		},
 	);
+	const actionsIndex = cols.length - 1;
 	if (!includeRetireJerseyButton) {
 		cols.pop();
 	}
@@ -150,6 +151,11 @@ const Players = ({
 				name="TeamHistory"
 				rows={rows}
 				pagination
+				mobileLayout="roster"
+				rosterBands={{
+					identity: [0],
+					controls: includeRetireJerseyButton ? [actionsIndex] : [],
+				}}
 			/>
 		</>
 	);

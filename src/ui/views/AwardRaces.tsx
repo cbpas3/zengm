@@ -180,6 +180,8 @@ const AwardRaces = ({
 									hideAllControls
 									name={`AwardRaces${name}`}
 									rows={rows}
+									mobileLayout="roster"
+									rosterBands={{ identity: [0, 1] }}
 									title={
 										<h2>
 											{name}

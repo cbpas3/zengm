@@ -340,6 +340,8 @@ const FreeAgents = ({
 				pagination
 				ref={setDataTableHandle}
 				rows={rows}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0], controls: [cols.length - 1] }}
 			/>
 		</>
 	);

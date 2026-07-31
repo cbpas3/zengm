@@ -133,6 +133,8 @@ const OfferPlayers = ({
 				hideMenuToo
 				name="TradingBlockOffer"
 				rows={rows}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0] }}
 			/>
 		);
 	}
@@ -781,6 +783,8 @@ const TradingBlock = ({
 						name="TradingBlock"
 						rows={rows}
 						footer={footer}
+						mobileLayout="roster"
+						rosterBands={{ identity: [0, 1] }}
 					/>
 				</div>
 				<div className="col-md-3 trading-block-draft-picks-wrapper">

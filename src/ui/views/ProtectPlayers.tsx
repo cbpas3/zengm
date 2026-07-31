@@ -138,6 +138,8 @@ const PlayerList = ({
 					rows={rows}
 					hideAllControls
 					nonfluid
+					mobileLayout="roster"
+					rosterBands={{ identity: [0, 1] }}
 				/>
 			</div>
 		</>

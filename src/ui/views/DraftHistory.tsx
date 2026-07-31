@@ -378,6 +378,8 @@ const DraftHistory = ({
 				name="DraftHistory"
 				rows={rows}
 				superCols={superCols}
+				mobileLayout="roster"
+				rosterBands={{ identity: [1] }}
 			/>
 		</>
 	);

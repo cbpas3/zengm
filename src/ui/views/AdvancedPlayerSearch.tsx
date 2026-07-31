@@ -879,6 +879,8 @@ const AdvancedPlayerSearch = (props: View<"advancedPlayerSearch">) => {
 					name="AdvancedPlayerSearch"
 					pagination
 					rows={rows}
+					mobileLayout="roster"
+					rosterBands={{ identity: [0] }}
 				/>
 			)}
 		</>

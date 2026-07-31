@@ -118,6 +118,8 @@ const FrivolitiesDraftClasses = ({
 				pagination={pagination}
 				rows={rows}
 				superCols={superCols}
+				mobileLayout="roster"
+				rosterBands={{ identity: [7] }}
 			/>
 		</>
 	);

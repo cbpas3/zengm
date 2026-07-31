@@ -176,6 +176,8 @@ export const genView = (
 					name={type === "college" ? "Colleges" : "Countries"}
 					rows={rows}
 					superCols={superCols}
+					mobileLayout="roster"
+					rosterBands={{ identity: [type === "jerseyNumbers" ? 9 : 8] }}
 				/>
 			</>
 		);

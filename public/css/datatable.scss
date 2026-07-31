@@ -401,6 +401,19 @@ table.table thead .sorting_desc_disabled {
 	font-weight: 600;
 }
 
+// Carries over table mode's showRowLabels <td> (batting order slot, pitcher role) - see Depth.tsx
+.dt-roster-rowlabel {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	min-width: 2.25rem;
+	min-height: 2.25rem;
+	color: var(--bs-secondary-color);
+	font-size: var(--zen-fs-sm);
+	font-weight: 600;
+}
+
 .dt-roster-avatar {
 	flex-shrink: 0;
 	width: 2.5rem;

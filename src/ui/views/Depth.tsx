@@ -500,6 +500,8 @@ const Depth = ({
 					hideAllControls={editable}
 					nonfluid
 					showRowLabels={!!rowLabels}
+					mobileLayout="roster"
+					rosterBands={{ identity: [0] }}
 					sortableRows={
 						editable
 							? {

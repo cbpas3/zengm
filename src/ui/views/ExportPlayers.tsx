@@ -227,6 +227,8 @@ const ExportPlayers = ({
 							controlledSelectedRows={selectedRows}
 							alwaysShowBulkSelectRows
 							disableBulkSelectKeys={selectedPids}
+							mobileLayout="roster"
+							rosterBands={{ identity: [0], controls: [6] }}
 						/>
 					</div>
 					<div className="my-3">
@@ -272,6 +274,8 @@ const ExportPlayers = ({
 									rows={rows2}
 									controlledSelectedRows={selectedRows2}
 									alwaysShowBulkSelectRows
+									mobileLayout="roster"
+									rosterBands={{ identity: [0, 1], controls: [7] }}
 								/>
 							</div>
 

@@ -173,6 +173,8 @@ const PlayerBios = ({
 				name="PlayerBios"
 				pagination
 				rows={rows}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0] }}
 			/>
 		</>
 	);

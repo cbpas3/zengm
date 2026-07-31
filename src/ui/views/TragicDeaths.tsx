@@ -118,6 +118,8 @@ const TragicDeaths = ({ players, stats, userTid }: View<"tragicDeaths">) => {
 				pagination
 				rows={rows}
 				superCols={superCols}
+				mobileLayout="roster"
+				rosterBands={{ identity: [0] }}
 			/>
 		</>
 	);
