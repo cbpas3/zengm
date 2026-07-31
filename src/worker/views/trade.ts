@@ -109,6 +109,10 @@ const updateTrade = async () => {
 		"watch",
 		"untradable",
 		"jerseyNumber",
+
+		// Headshots for the mobile roster-row layout (DataTable/RosterRows.tsx)
+		"face",
+		"imgURL",
 	];
 	const ratings = ["ovr", "pot", "skills", "pos"];
 	const stats = bySport({

@@ -45,6 +45,7 @@ import { MobileCards } from "./MobileCards.tsx";
 import { MobileControls } from "./MobileControls.tsx";
 import { useBreakpointUp } from "../../hooks/useBreakpoint.ts";
 import { ColumnDefinitions } from "./ColumnDefinitions.tsx";
+import { RosterRows } from "./RosterRows.tsx";
 
 export type SortBy = [number, SortOrder];
 
@@ -163,6 +164,21 @@ export type Props = {
 	// fits). Automatically disabled when `sortableRows` is set — drag-to-reorder is a table
 	// interaction. See MOBILE_FIRST_ACCESSIBILITY_PLAN.md §4.3.
 	mobileCards?: false | "auto";
+
+	// Which mobile layout to use. "cards" (default) is the generic label/value card; "roster" is the
+	// Yahoo-Fantasy-style two-line player row — identity on top, stats aligned to a shared header —
+	// which reads far better for roster-shaped pages. See DataTable/RosterRows.tsx.
+	mobileLayout?: "cards" | "roster";
+	// Only for mobileLayout="roster". Indices into `cols`. `identity` renders on line 1 (the Name
+	// cell and friends), `controls` renders at the end of line 1 (interactive widgets like the
+	// Roster page's PT/Dev/Release). Everything else becomes an aligned stat column on line 2.
+	rosterBands?: {
+		identity: number[];
+		controls?: number[];
+	};
+	// Optional left-hand badge (the Yahoo C/Util/BN circle) and headshot for each player row.
+	rosterBadge?: (row: DataTableRow, index: number) => ReactNode;
+	rosterAvatar?: (row: DataTableRow) => ReactNode;
 	// Which visible column is the card's heading. Defaults to the first non-rank column.
 	mobileCardPrimaryCol?: number;
 	// How many label/value pairs to show before the "Show all" disclosure.
@@ -193,6 +209,10 @@ export const DataTable = ({
 	mobileCards = "auto",
 	mobileCardPrimaryCol,
 	mobileCardVisiblePairs,
+	mobileLayout = "cards",
+	rosterBands,
+	rosterBadge,
+	rosterAvatar,
 	name,
 	nonfluid,
 	pagination,
@@ -437,7 +457,7 @@ export const DataTable = ({
 	// processedRows[].data is already reordered to match colOrderFiltered, so the card layout needs
 	// the same narrowed, display-ordered col list for its indices to line up.
 	const mdUp = useBreakpointUp("md");
-	const useCards = mobileCards !== false && !mdUp && !sortableRows;
+	const mobileEligible = mobileCards !== false && !mdUp;
 	const visibleCols = colOrderFiltered.map(({ colIndex }) => cols[colIndex]!);
 
 	// Default card heading: the first visible column that isn't the rank number, since "1" is not a
@@ -467,6 +487,59 @@ export const DataTable = ({
 			sortBys,
 		});
 	};
+
+	// ---- Roster-row layout bands -------------------------------------------------------------
+	// rosterBands is expressed in `cols` indices (what the view author knows); everything downstream
+	// works in visible-column indices, since processedRows[].data is reordered to colOrderFiltered.
+	// Unlike cards, the roster layout CAN carry a reorderable list: each player is a single node and
+	// reordering is done with buttons rather than dnd-kit, so sortableRows no longer forces the
+	// table. That matters because the editable roster - the page this layout exists for - is exactly
+	// the one that sets sortableRows.
+	const useRosterRows =
+		mobileEligible && mobileLayout === "roster" && rosterBands !== undefined;
+	// Cards still can't do drag-to-reorder, so they keep opting out of it
+	const useCards = mobileEligible && !useRosterRows && !sortableRows;
+	const toVisible = (colIndexes: number[]) =>
+		colIndexes
+			.map((colIndex) =>
+				colOrderFiltered.findIndex((c) => c.colIndex === colIndex),
+			)
+			.filter((i) => i !== -1);
+	const rosterIdentityIndexes = toVisible(rosterBands?.identity ?? []);
+	const rosterControlIndexes = toVisible(rosterBands?.controls ?? []);
+	// Anything not explicitly placed becomes an aligned stat column, so a view that gains a column
+	// later gets it in the strip automatically rather than silently dropping it.
+	const rosterStatIndexes = colOrderFiltered
+		.map((_, i) => i)
+		.filter(
+			(i) =>
+				!rosterIdentityIndexes.includes(i) && !rosterControlIndexes.includes(i),
+		);
+
+	// Header taps reuse the table's own sort cycling, so asc/desc/sortSequence behave identically
+	const handleRosterSort = (visibleIndex: number) => {
+		const colIndex = colOrderFiltered[visibleIndex]?.colIndex;
+		if (colIndex === undefined || state.sortBys === undefined) {
+			return;
+		}
+		const sortBys = updateSortBys({
+			cols,
+			event: { shiftKey: false } as MouseEvent,
+			i: colIndex,
+			prevSortBys: state.sortBys,
+		});
+		state.settingsCache.set("DataTableSort", sortBys);
+		setStatePartial({ currentPage: 1, sortBys });
+	};
+
+	// The roster header shows sort state per visible column, so map sortBys into that space
+	const rosterSortBys = state.sortBys?.map(
+		([colIndex, order]) =>
+			[
+				colOrderFiltered.findIndex((c) => c.colIndex === colIndex),
+				order,
+			] as SortBy,
+	);
 
 	const highlightCols =
 		state.sortBys === undefined
@@ -676,7 +749,7 @@ export const DataTable = ({
 							) : null}
 						</div>
 					) : null}
-					{useCards ? (
+					{useCards || useRosterRows ? (
 						<DataTableContext value={dataTableContext}>
 							{hideAllControls ? null : (
 								<MobileControls
@@ -694,12 +767,34 @@ export const DataTable = ({
 									hideSearch={!hideMenuToo}
 								/>
 							)}
-							<MobileCards
-								rows={processedRowsPage}
-								cols={visibleCols}
-								primaryIndex={cardPrimaryIndex}
-								visiblePairs={mobileCardVisiblePairs}
-							/>
+							{useRosterRows ? (
+								<RosterRows
+									rows={processedRowsPage}
+									cols={visibleCols}
+									identityIndexes={rosterIdentityIndexes}
+									controlIndexes={rosterControlIndexes}
+									statIndexes={rosterStatIndexes}
+									sortBys={rosterSortBys}
+									onSortChange={handleRosterSort}
+									renderBadge={rosterBadge}
+									renderAvatar={rosterAvatar}
+									// Only offer reordering when sorting is off, otherwise the
+									// displayed index wouldn't match the underlying roster index and
+									// a swap would move the wrong player.
+									onSwap={
+										sortableRows && state.sortBys === undefined
+											? sortableRows.onSwap
+											: undefined
+									}
+								/>
+							) : (
+								<MobileCards
+									rows={processedRowsPage}
+									cols={visibleCols}
+									primaryIndex={cardPrimaryIndex}
+									visiblePairs={mobileCardVisiblePairs}
+								/>
+							)}
 						</DataTableContext>
 					) : (
 					<ResponsiveTableWrapper

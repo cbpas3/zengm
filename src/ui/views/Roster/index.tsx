@@ -32,6 +32,7 @@ import { SafeHtml } from "../../components/SafeHtml.tsx";
 import { HelpPopover } from "../../components/HelpPopover.tsx";
 import { confirm } from "../../util/confirm.tsx";
 import { bySport, isSport } from "../../../common/sportFunctions.ts";
+import { PlayerPicture } from "../../components/PlayerPicture.tsx";
 
 const handleRelease = async (
 	p: View<"roster">["players"][number],
@@ -153,25 +154,35 @@ const Roster = ({
 
 	const profit = t.seasonAttrs !== undefined ? t.seasonAttrs.profit : 0;
 
+	// Row keys are pids, so this resolves a row back to its player for the mobile headshot
+	const playersByPidAll = groupByUnique(players, "pid");
+
 	const showMood = season === currentSeason;
 
+	// Named separately so the mobile roster-row layout can derive its band indices by key rather
+	// than hardcoding positions - half of these columns are conditional, so literal indices would
+	// silently point at the wrong column as soon as a flag flips.
+	const colKeys = [
+		"Name",
+		"Pos",
+		"Age",
+		"Ovr",
+		"Pot",
+		...(season === currentSeason ? ["Contract"] : []),
+		"stat:yearsWithTeam",
+		"Country",
+		...stats.map((stat) => `stat:${stat}`),
+		...(editable ? ["PT", "Dev"] : []),
+		...(showMood ? ["Mood"] : []),
+		...(showRelease ? ["Release"] : []),
+		...(showTradeFor || showTradingBlock ? ["Trade"] : []),
+		"Acquired",
+	];
+	const colIndexesFor = (keys: string[]) =>
+		keys.map((key) => colKeys.indexOf(key)).filter((i) => i !== -1);
+
 	const cols = getCols(
-		[
-			"Name",
-			"Pos",
-			"Age",
-			"Ovr",
-			"Pot",
-			...(season === currentSeason ? ["Contract"] : []),
-			"stat:yearsWithTeam",
-			"Country",
-			...stats.map((stat) => `stat:${stat}`),
-			...(editable ? ["PT", "Dev"] : []),
-			...(showMood ? ["Mood"] : []),
-			...(showRelease ? ["Release"] : []),
-			...(showTradeFor || showTradingBlock ? ["Trade"] : []),
-			"Acquired",
-		],
+		colKeys,
 		{
 			Country: {
 				title: "",
@@ -528,6 +539,37 @@ const Roster = ({
 				rows={rows}
 				hideAllControls={editable}
 				nonfluid
+				// Yahoo-style rows on mobile: name + position on line 1 with the interactive
+				// controls, everything numeric in the aligned strip on line 2.
+				mobileLayout="roster"
+				rosterBands={{
+					identity: colIndexesFor(["Name", "Pos"]),
+					controls: colIndexesFor([
+						"PT",
+						"Dev",
+						"Mood",
+						"Release",
+						"Trade",
+					]),
+				}}
+				rosterBadge={(row, index) => {
+					// Mirrors the drag-handle highlight the table uses for starters
+					if (!isSport("basketball")) {
+						return null;
+					}
+					return index < numPlayersOnCourt ? index + 1 : "BN";
+				}}
+				rosterAvatar={(row) => {
+					const p = playersByPidAll[row.key as number];
+					if (!p) {
+						return null;
+					}
+					// Deliberately not `lazy`: facesjs's lazy mode renders an empty placeholder until the
+						// element intersects, and inside this layout's sticky/overflow container the
+						// observer doesn't fire reliably - the first screenful stayed blank. A roster is
+						// ~15 faces, which measured fine rendered eagerly.
+						return <PlayerPicture face={p.face} imgURL={p.imgURL} />;
+				}}
 				sortableRows={
 					editable
 						? {
