@@ -6,8 +6,10 @@
 // meaty part - playoff meetings - from playoffSeries, which is unambiguous (round, sides, series
 // score). Compute only the "intensity/drama" ranking on top. Pure, DB-free.
 
+import { seriesId as makeSeriesId } from "./derivePlayoffSeries.ts";
 import type {
 	PlayoffMeeting,
+	ProjectedPlayoffSeries,
 	RawHeadToHead,
 	RawPlayoffSeries,
 	RivalryEntry,
@@ -62,6 +64,13 @@ const collectPlayoffMeetings = (
 					loserTid: homeWon ? away.tid : home.tid,
 					winnerWins: homeWon ? home.won : away.won,
 					loserWins: homeWon ? away.won : home.won,
+					// Link out to playoffSeries.json / the game index, so "every playoff meeting" is
+					// traversable down to the individual games rather than a dead-end summary.
+					seriesId: makeSeriesId(record.season, round + 1, [
+						home.tid,
+						away.tid,
+					]),
+					gids: [...(matchup.gids ?? [])],
 				};
 				const key = pairKey(home.tid, away.tid);
 				const arr = byPair.get(key) ?? [];
@@ -91,11 +100,21 @@ const collectRegularSeason = (
 	return byPair;
 };
 
+export type DeriveRivalriesOptions = {
+	// Already-projected series, used to fill in gids when the raw records are missing them.
+	projectedPlayoffSeries?: ProjectedPlayoffSeries[];
+};
+
 export const deriveRivalries = (
 	playoffSeries: RawPlayoffSeries[],
 	headToHeads: RawHeadToHead[] = [],
+	options: DeriveRivalriesOptions = {},
 ): RivalryEntry[] => {
 	const meetingsByPair = collectPlayoffMeetings(playoffSeries);
+
+	const gidsBySeriesId = new Map(
+		(options.projectedPlayoffSeries ?? []).map((s) => [s.seriesId, s.gids]),
+	);
 	const regularByPair = collectRegularSeason(headToHeads);
 
 	// Union of pairs that have any playoff meetings (the rivalry-worthy set).
@@ -127,7 +146,8 @@ export const deriveRivalries = (
 			continue;
 		}
 
-		let intensity = accum.meetings.length * RIVALRY_TUNING.PLAYOFF_MEETING_WEIGHT;
+		let intensity =
+			accum.meetings.length * RIVALRY_TUNING.PLAYOFF_MEETING_WEIGHT;
 		for (const m of accum.meetings) {
 			intensity += m.round * RIVALRY_TUNING.DEEP_ROUND_WEIGHT;
 			if (m.winnerWins - m.loserWins === 1) {
@@ -146,8 +166,18 @@ export const deriveRivalries = (
 			regularSeason:
 				accum.regGames > 0
 					? { aWon: accum.regA, bWon: accum.regB, tied: accum.regTied }
-					: undefined,
-			playoffMeetings: [...accum.meetings].sort((x, y) => x.season - y.season),
+					: null,
+			playoffMeetings: [...accum.meetings]
+				.sort((x, y) => x.season - y.season || x.round - y.round)
+				.map((m) => ({
+					...m,
+					gids:
+						m.gids.length > 0
+							? m.gids
+							: ((m.seriesId === null
+									? undefined
+									: gidsBySeriesId.get(m.seriesId)) ?? []),
+				})),
 			playoffSeriesCount: accum.meetings.length,
 			intensity: Math.round(intensity * 10) / 10,
 		});

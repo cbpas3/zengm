@@ -831,7 +831,7 @@ that script exists.
 
 ---
 
-## Feature 10: AI Story Export (Phase 1)
+## Feature 10: AI Story Export (Phase 1, v2 schema)
 
 ### What it does
 
@@ -843,59 +843,120 @@ retrospectives, game recaps. The fork's job becomes producing _facts + structure
 design rationale in `AI_STORY_EXPORT_PLAN.md` (grounded in a real 390 MB / ~75-season save: `games`
 are ~89% of the payload, so the narrative layer is small and the box-score bulk is sharded/opt-in).
 
+**`meta.version` is now `2`.** v1 shipped and was used to write real articles against an 80-season
+league; that produced a detailed bug report whose findings drove a large correctness + enrichment
+pass. See "The v1 bug report" below — several of those bugs are the kind that recur, and the shape
+of the fix matters more than the fix.
+
 ### The bundle
 
 One navigable JSON file (a "virtual filesystem" object keyed by path — no zip dependency), built by
 `downloadFile`. Contents:
 
-- **Entity tables** — `players`, `teams`: trimmed to narrative fields (face/financial/fuzz noise
-  dropped) and cross-linked (transactions = career movement, relatives, `teamsPlayedFor`, titles,
-  division rivals, `titleDrought`).
-- **Derived canon** (`rankings.json`, `dynasties.json`, `rivalries.json`) — the foundational-article
-  fuel: greatest players (WS + peak + accolades), greatest team-seasons, biggest busts/steals
-  (self-calibrating expected-WS-by-round), dynasties (clustered titles), rivalries (playoff meetings
-  from `playoffSeries` + all-time H2H from `headToHeads`, intensity-ranked).
-- **Game index** (`gameIndex.json`) — one compact row per game (winner, margin, who played,
-  notability) — the queryable spine over the box-score bulk; plus a pre-filtered `notableGames`
-  shard (capped). Full per-season NDJSON box scores are an **opt-in** checkbox (`includeFullGames`).
-- **Embedded docs** — `README.md`, `canon-workflow.md` (ground-truth preamble + tiered prompt
-  library + canon-index mechanism), and `pull_games.py` (an index-driven, constant-memory box-score
-  filter so an agent can pull "all of a player's games" or "only his notable ones" without scanning
-  the bulk).
+- **Entity tables** — `players`, `teams`. Player season lines carry full counting stats, shooting
+  splits, **shot-location distribution** (`fgaAtRim`/`fgaLowPost`/`fgaMidRange`/`tpa` plus a
+  rounded `shotDist`), and the advanced metrics; ratings rows carry ZenGM's per-season **skill
+  labels**; plus height/weight, injuries, career highs, pre-joined `highlightGames`, and
+  transactions **with both sides of each trade** (joined from the events store). Team season rows
+  carry real context (points for/against, pace, ortg/drtg, conference/division finish, playoff
+  seed) alongside the record, plus `relocations`.
+- **Derived canon** (`rankings.json`, `dynasties.json`, `rivalries.json`) — greatest players
+  (career value + peak + accolades), greatest team-seasons, biggest busts/steals (expected value
+  fitted **per draft slot**, smoothed over neighbouring picks), dynasties, intensity-ranked
+  rivalries whose playoff meetings link out by `seriesId` and `gids`.
+- **`playoffSeries.json`** — every series as a first-class record (round, seeds, series score,
+  winner, gids). **`awards.json`**, **`leaderboards.json`** (career + single-season top 25),
+  **`league.json`** (conference/division names).
+- **Game index** (`gameIndex.json`) — one row per game: final score, margin, overtimes, who played,
+  `playoffs`/`round`/`seriesId`/`seriesGameNumber`, notability, and `boxScoreIncluded`. The
+  queryable spine over the box-score bulk; plus a pre-filtered `notableGames` shard (capped at
+  3,000). Full per-season NDJSON box scores are an **opt-in** checkbox (`includeFullGames`).
+- **Embedded docs** — `README.md` (**generated from the actual file list**), `canon-workflow.md`,
+  and `pull_games.py` (works against the single-file bundle it ships inside, and against an
+  unpacked directory).
 
-### Architecture
+### Two conventions that are load-bearing
 
-Focal subject + concentric context, over a normalized ID-linked table set. Canon-first pipeline:
-Tier-0 facts → Tier-1 foundational canon (emits structured canonical claims) → Tier-2 dependent
-pieces (fed the relevant claims so a corpus stays self-consistent). All compute is **pure and
-DB-free** (36 unit tests); one impure module does the `idb` reads and streams games one season at a
-time so the box-score bulk never sits in memory at once.
+1. **`null` means not computable; never `undefined`, never `0`.** `JSON.stringify` drops undefined
+   keys, which is how v1 shipped 114 players with no `pos` key at all and a `playoffs` flag that
+   vanished from every game-index row (`Game.playoffs` is optional in storage). And a `0` for an
+   uncomputable metric reads as "replacement level" — v1 reported Bill Russell's career-best VORP
+   as 0.0. Every projected field is `T | null`.
+2. **Derived stats are derived, in `statFields.ts`.** Several fields a reader expects are _not_
+   columns in the database — they are assembled at read time by
+   `src/common/processPlayerStats.basketball.ts`. `ws = ows + dws`; `trb = trb + orb + drb` (modern
+   rows store orb/drb only, the oldest real rows store a bare trb); `bpm = obpm + dbpm`. Reading
+   `row.ws` off a storage record yields `undefined`, and `undefined ?? 0` yields a number that
+   passes every truthiness check while being uniformly wrong.
+
+### Data coverage + validation (`meta.dataCoverage`, `meta.validation`)
+
+`dataCoverage` profiles, per metric, the earliest/latest season with a value and the share of rows
+that carry one, plus `knownNullFields`, documented `sentinels` (`playoffRoundsWon: -1`, undrafted
+`round 0/pick 0`, sub-zero `tid`s), and `unavailable` — things ZenGM does not model at all (award
+vote shares, coaches, arena names), stated so a prompt doesn't ask for them.
+
+`validate.ts` runs **before** anything is written and checks the four failure shapes the bug report
+found: an all-zero numeric column, a ranking whose sort key has zero variance (i.e. it degraded to
+insertion order), a doc that references a file or evidence field the bundle doesn't contain, and a
+record whose key set differs from its neighbours'. Results ship inside the bundle
+(`meta.validation`) and are echoed in the README, rather than being thrown — a user with an odd
+league still gets their export, but the caveats travel with it.
 
 ### Tuning
 
-`CANON_TUNING` (greatness weights, list sizes, dynasty thresholds), `STORY_NOTABILITY` (game-score
-cutoffs), `RIVALRY_TUNING` (intensity weights) — all first-cut constants, each in one place, to be
-recalibrated against a real league (same posture as `GAME_PLAN_TUNING`).
+`CANON_TUNING` (greatness weights, list sizes, draft-slot smoothing, dynasty thresholds),
+`STORY_NOTABILITY` (game-score cutoffs), `RIVALRY_TUNING` (intensity weights),
+`LEADERBOARD_TUNING` (top-N, rate-stat workload floors) — all first-cut constants, each in one
+place, to be recalibrated against a real league (same posture as `GAME_PLAN_TUNING`).
 
 ### Key files
 
-| File                                                   | Role                                                                                      |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `AI_STORY_EXPORT_PLAN.md`                              | Design/spec doc (Phase 1 implemented; Phases 2–3 deferred)                                |
-| `src/worker/util/storyExport/types.ts`                 | Raw-input types (export-schema subset) + projected/canon/KB output types                  |
-| `src/worker/util/storyExport/gameNotability.ts`        | Hollinger game score + per-game notability (`STORY_NOTABILITY`)                           |
-| `src/worker/util/storyExport/deriveCanon.ts`           | Greatest players/team-seasons/busts/steals/dynasties (`CANON_TUNING`)                     |
-| `src/worker/util/storyExport/deriveRivalries.ts`       | Rivalries from `playoffSeries` + `headToHeads` (`RIVALRY_TUNING`)                         |
-| `src/worker/util/storyExport/projectEntities.ts`       | Trimmed, cross-linked player/team tables; `attachTitles` (champion = league-max rounds)   |
-| `src/worker/util/storyExport/gameIndex.ts`             | `buildGameIndex` — compact per-game index rows + notable-gid selection                    |
-| `src/worker/util/storyExport/assembleKnowledgeBase.ts` | Pure orchestrator → full table set (game index passed in precomputed)                     |
-| `src/worker/util/storyExport/serialize.ts`             | Bundle files (compact JSON) + `bundleToVirtualFs` single-file delivery                    |
-| `src/worker/util/storyExport/buildFromDb.ts`           | The one impure module: `idb` reads (flush + raw stores), per-season game streaming        |
-| `src/common/storyWorkflow.ts`                          | Ground-truth preamble, Tier-1/Tier-2 prompts, canon-index note, `pull_games.py` (as data) |
-| `src/worker/api/index.ts`                              | `generateStoryExport` endpoint (dynamic-imports the loader)                               |
-| `src/ui/views/ExportStory.tsx`                         | Tools page: opt-in full-games checkbox + one-click download                               |
-| `src/worker/views/exportStory.ts`                      | Static view; registered in views/routeInfos/menuItems (Tools → "AI Story Export")         |
-| `src/worker/util/storyExport/*.test.ts`                | 36 pure-layer unit tests (notability, canon, rivalries, projection, index, assembler)     |
+| File                                                   | Role                                                                                           |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `AI_STORY_EXPORT_PLAN.md`                              | Design/spec doc (Phase 1 implemented; Phases 2–3 deferred)                                     |
+| `src/worker/util/storyExport/types.ts`                 | Raw-input types (export-schema subset) + projected/canon/KB output types                       |
+| `src/worker/util/storyExport/statFields.ts`            | `deriveWs`/`deriveTrb`/`deriveBpm`, null-safe numerics, `possessions` — the derived-stat rules |
+| `src/worker/util/storyExport/gameNotability.ts`        | Hollinger game score + per-game notability (`STORY_NOTABILITY`)                                |
+| `src/worker/util/storyExport/deriveCanon.ts`           | Greatest players/team-seasons/busts/steals/dynasties (`CANON_TUNING`)                          |
+| `src/worker/util/storyExport/deriveRivalries.ts`       | Rivalries from `playoffSeries` + `headToHeads` (`RIVALRY_TUNING`)                              |
+| `src/worker/util/storyExport/derivePlayoffSeries.ts`   | First-class series records; gid → round/series/game-number lookup; seed lookup                 |
+| `src/worker/util/storyExport/deriveLeaderboards.ts`    | All-time career + single-season top 25 (`LEADERBOARD_TUNING`)                                  |
+| `src/worker/util/storyExport/projectEntities.ts`       | Trimmed, cross-linked player/team tables; `attachTitles` (champion = league-max rounds)        |
+| `src/worker/util/storyExport/gameIndex.ts`             | Index rows + `accumulateSeasonPoints` (the point-differential backfill)                        |
+| `src/worker/util/storyExport/sanitizeBoxScore.ts`      | Rounds `min`; HTML clutchPlays → plain text + structured `{text, pids, teamAbbrevs}`           |
+| `src/worker/util/storyExport/dataCoverage.ts`          | `buildDataCoverage`, `SENTINELS`, `UNAVAILABLE`                                                |
+| `src/worker/util/storyExport/validate.ts`              | The pre-export validation pass                                                                 |
+| `src/worker/util/storyExport/assembleKnowledgeBase.ts` | Pure orchestrator → full table set (game index passed in precomputed)                          |
+| `src/worker/util/storyExport/serialize.ts`             | Bundle files + generated README/workflow + `bundleToVirtualFs` single-file delivery            |
+| `src/worker/util/storyExport/buildFromDb.ts`           | The one impure module: `idb` reads, per-season game streaming, highlight/points accumulators   |
+| `src/common/storyWorkflow.ts`                          | Preamble, Tier-1/Tier-2 prompts (+ their declared `inputs`/`evidence`), `pull_games.py`        |
+| `src/worker/api/index.ts`                              | `generateStoryExport` endpoint (dynamic-imports the loader)                                    |
+| `src/ui/views/ExportStory.tsx`                         | Tools page: opt-in full-games checkbox + one-click download                                    |
+| `src/worker/views/exportStory.ts`                      | Static view; registered in views/routeInfos/menuItems (Tools → "AI Story Export")              |
+| `src/worker/util/storyExport/*.test.ts`                | 68 pure-layer unit tests, incl. a "regressions from the v1 export bug report" suite            |
+
+### The v1 bug report (2026-08-09) — what was wrong and what the fix looked like
+
+Written against a real 80-season / 5,298-player / 30,145-game export. Ordered as reported:
+
+| Bug                                                                                                                                               | Root cause                                                                                                | Fix                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ws` was `0` in all 40,733 stat lines and all 5,298 career totals                                                                                 | There is no stored `ws` column; it's `dws + ows`                                                          | `deriveWs` in `statFields.ts`; `null` when neither component exists                                                                                                                                 |
+| `busts`/`steals` were not ranked (all deltas `0`, so insertion order)                                                                             | Downstream of the above                                                                                   | Fixed metric, plus expected value fitted per **slot** not per round, plus a validation check for zero-variance sort keys                                                                            |
+| `pointDiffPerGame` existed only from 2004, silently penalising every earlier team a full ranking component                                        | Read only from team **stat** rows, which don't exist for seasons that were imported rather than simulated | Backfilled from the game index (`accumulateSeasonPoints`); when still unknown, imputed from a league-fitted win% → differential slope and flagged `pointDiffImputed`                                |
+| VORP/PER `0` for whole early eras                                                                                                                 | `?? 0` on absent values                                                                                   | `null`, plus `dataCoverage` per metric                                                                                                                                                              |
+| `careerTotals.trb` null for 79% of players (inverted coverage)                                                                                    | Modern rows store `orb`/`drb`, not `trb`; summing `undefined` gave `NaN` → `null`                         | `deriveTrb`; rebounds also added to season lines                                                                                                                                                    |
+| UTF-8 BOM broke `json.load()` on the first tool call                                                                                              | `downloadFile` prepends `\ufeff` for _string_ input (deliberate, for Excel/CSV)                           | `ExportStory.tsx` passes bytes via `TextEncoder` instead                                                                                                                                            |
+| Docs described `games/*.ndjson`, `pull_games.py` usage, and a `playoffSeries` read that weren't in the bundle                                     | README hand-written; `pull_games.py` assumed a directory layout that never ships                          | README generated from the file manifest; `pull_games.py` rewritten for the single-file bundle; `playoffSeries.json` now actually exported; validation fails on any documented-but-absent file/field |
+| `gameIndex` couldn't tell a playoff game from a January one                                                                                       | `Game.playoffs` is **optional** in storage, so `undefined` → key dropped by `JSON.stringify`              | Coerced, plus `round`/`seriesId`/`seriesGameNumber` stamped from the playoffSeries store                                                                                                            |
+| `notable` was 72% of games but only 3,000 box scores shipped                                                                                      | One name for two different thresholds                                                                     | `boxScoreIncluded` added, stamped after the cap is applied                                                                                                                                          |
+| Undocumented sentinels; `meta.teams` (30) disagreed with `teams.json` (36); defunct franchises had live title droughts; 114 players missing `pos` | —                                                                                                         | `SENTINELS`, `teamsIncludingDisabled`, `titleDrought: null` when `disabled`, `pos` falls back to the last rated season                                                                              |
+| Box scores had unrounded float `min` and raw HTML `clutchPlays` with dead league-relative links                                                   | Stored for the in-app UI, not for an outside consumer                                                     | `sanitizeBoxScore.ts`                                                                                                                                                                               |
+
+Everything in the report's "what to add" list was added except award vote shares — ZenGM awards
+have no voting, so there is nothing to export; that is stated explicitly in
+`meta.dataCoverage.unavailable` rather than silently omitted.
 
 ### Gotchas found & fixed while shipping (validated in-app + on the deploy)
 
@@ -905,12 +966,21 @@ recalibrated against a real league (same posture as `GAME_PLAN_TUNING`).
    current (same as `makeExportStream`).
 2. **Production-build fingerprint bug** (see the Deployment section) — surfaced on the first prod
    build because the export was the first reason to run one. Fixed in `buildJs.ts`.
+3. **`downloadFile` adds a BOM to string payloads on purpose.** Don't "fix" it there — CSV exports
+   depend on it. Pass bytes for anything a machine will parse.
 
 ### Scope
 
 Phase 1 only: the compact knowledge base + canon + game index + workflow/prompts. The box-score
 bulk is opt-in. Phases 2–3 (scoped Tier-2 exports with canon feedback; league-DB persistence of
 generated articles; dynasty/multi-season pieces) are specced in the plan doc, not built.
+
+### Not yet re-validated
+
+The v2 schema is unit-tested (68 tests) and was exercised end to end against a synthetic bundle —
+including running the emitted `pull_games.py` against the emitted JSON — but **has not been re-run
+against the user's real 80-season save**. The tuning constants behind the new busts/steals slot
+curve and the point-differential imputation in particular want a look at real output.
 
 ---
 
@@ -937,7 +1007,7 @@ the Bootstrap partials (it needs `media-breakpoint-up`, and its `html` rule must
 before the app CSS. `dark.scss` `@import`s `light.scss`, so tokens cover both themes.
 
 **Why custom properties and not utility classes:** the production build runs PurgeCSS over
-`build/gen/*.js` and deletes any *class* selector not found literally in the emitted JS.
+`build/gen/*.js` and deletes any _class_ selector not found literally in the emitted JS.
 `:root` / `[data-*]` / element selectors are not class-based and survive purging.
 
 ### The scale mechanism
@@ -950,17 +1020,16 @@ Percentages (not px) keep the user's own browser/OS font preference in the chain
 stamped on `<html>` by the **pre-paint inline script in `public/index.html`** (`getFontScale` /
 `applyFontScale`, exposed on `window` and declared in `types.ts`), mirroring the existing theme
 mechanism exactly, so there is no flash of the wrong size on load. Persisted in `localStorage` as a
-device preference — *not* a league/account option — and synced across tabs by the `storage` handler
+device preference — _not_ a league/account option — and synced across tabs by the `storage` handler
 in `src/ui/index.tsx`. Exposed as "Text Size" in Global Settings.
 
 **The default is 21px, not the 18px this feature originally shipped with** (`public/css/_tokens.scss`:
 `html { font-size: 131.25% }`) — bumped up one tier after review, since this app's stated audience
 is elderly/low-vision. The `FontScale` union's key names do **not** match ascending size order:
 `"default"` means "no `data-font-scale` attribute set" (i.e. what a fresh visitor gets) and happens
-to be the *largest* common tier at 21px; `"large"` is actually smaller, at 18px. This is intentional
+to be the _largest_ common tier at 21px; `"large"` is actually smaller, at 18px. This is intentional
 — the key names are internal plumbing, and the `<select>` in `GlobalSettings/index.tsx` lists the
-options in ascending visible order (Standard 16 → Large 18 → **Larger 21, recommended** → Largest
-24) regardless of what the underlying key is called. If you touch this again, don't try to rename the
+options in ascending visible order (Standard 16 → Large 18 → **Larger 21, recommended** → Largest 24) regardless of what the underlying key is called. If you touch this again, don't try to rename the
 keys into size order — that would touch `localStorage` compatibility for existing users, safelist
 regexes in `buildCss.ts`, and every place that reads `FontScale`. Change the label text and the CSS
 values, not the keys.
@@ -1022,7 +1091,7 @@ Four things worth knowing before touching it:
   `tbody` cell widths, so `sortableRows` can't cross into this layout. `RosterRows` renders ▲/▼
   calling the same `sortableRows.onSwap`, and only when sorting is off (otherwise display index
   wouldn't match roster index). For a reduced-motor-precision user this is the better affordance
-  anyway. Unlike card mode, roster mode therefore does *not* fall back to the table when
+  anyway. Unlike card mode, roster mode therefore does _not_ fall back to the table when
   `sortableRows` is set — which matters, because the editable roster is the page this exists for.
 - **Headshots are rendered eagerly.** `PlayerPicture` is passed no `lazy`: facesjs's lazy mode draws
   an empty placeholder until the element intersects, and inside this layout's sticky/overflow
@@ -1037,7 +1106,7 @@ line. Putting them behind a per-row disclosure would be the next improvement.
 ### Hover-only information
 
 Column definitions lived only in `title={desc}` on the `<th>` — a native tooltip, unreachable on
-touch. Now: card labels *are* the full names; `DataTable/ColumnDefinitions.tsx` adds a tappable
+touch. Now: card labels _are_ the full names; `DataTable/ColumnDefinitions.tsx` adds a tappable
 "What do these columns mean?" disclosure under the table for table mode; and `<th>` carries
 `aria-label` + `aria-sort`. `.small-scrollbar` also only widened on `:hover`, so `@media (hover: none)`
 gives touch devices a full-size scrollbar.
@@ -1105,13 +1174,13 @@ See `MOBILE_FIRST_ACCESSIBILITY_PLAN.md` §16 ("Not done") for the same list wit
 
 "Every page" is ~190 routes over 123 view modules, so progress is measured, not asserted.
 
-| Command | What it does |
-| ------- | ------------ |
-| `node tools/a11y/audit.ts --baseline` | Full matrix, writes `out/baseline.json` |
-| `node tools/a11y/audit.ts --quick` | One viewport + default scale, for iteration |
-| `node tools/a11y/audit.ts --routes=roster,playerStats` | Subset |
-| `node tools/a11y/audit.ts --screenshots` | Also save a PNG per page |
-| `node tools/a11y/checkCss.ts` | Compile `light`/`dark` SCSS only — seconds, not minutes |
+| Command                                                | What it does                                            |
+| ------------------------------------------------------ | ------------------------------------------------------- |
+| `node tools/a11y/audit.ts --baseline`                  | Full matrix, writes `out/baseline.json`                 |
+| `node tools/a11y/audit.ts --quick`                     | One viewport + default scale, for iteration             |
+| `node tools/a11y/audit.ts --routes=roster,playerStats` | Subset                                                  |
+| `node tools/a11y/audit.ts --screenshots`               | Also save a PNG per page                                |
+| `node tools/a11y/checkCss.ts`                          | Compile `light`/`dark` SCSS only — seconds, not minutes |
 
 `audit.ts` serves `build/` (so it exercises the **production** CSS, PurgeCSS included), bootstraps a
 league once into a persistent browser profile (`tools/a11y/.profile`, reused across runs; `--fresh`
@@ -1121,6 +1190,7 @@ horizontal document overflow, no text under 14px, no interactive element under 2
 thresholds and the in-page assertions; `routes.ts` is the page inventory grouped by archetype.
 
 **Gotchas:**
+
 - The sandbox's preinstalled Chromium predates the pinned `playwright`'s expected build, so the
   harness launches `/opt/pw-browsers/chromium` explicitly (`A11Y_CHROMIUM` overrides). Never run
   `playwright install`.
@@ -1129,25 +1199,25 @@ thresholds and the in-page assertions; `routes.ts` is the page inventory grouped
 
 ### Key files
 
-| File | Role |
-| ---- | ---- |
-| `MOBILE_FIRST_ACCESSIBILITY_PLAN.md` | The spec: design targets, per-file inventory, phases, anti-goals |
-| `public/css/_tokens.scss` | Token layer, root scale, reduced-motion, focus ring, form-control floors |
-| `public/css/light.scss` | `$font-size-base: 1rem`, heading/control sizing vars, chrome geometry, all the de-hardcoded rules |
-| `public/css/dark.scss` | Contrast: `$min-contrast-ratio`, `$body-secondary-color` |
-| `public/css/datatable.scss` | Card-mode + column-definition CSS; search box now full-width on mobile |
-| `public/css/sidebar.scss` | Drawer sizing, 48px nav links, wrapping labels |
-| `public/index.html` | Pre-paint `getFontScale`/`applyFontScale`; body padding moved to CSS |
-| `src/ui/hooks/useBreakpoint.ts` | `useBreakpointUp`/`useBreakpointDown` |
-| `src/ui/components/DataTable/MobileCards.tsx` | Card layout |
-| `src/ui/components/DataTable/MobileControls.tsx` | Mobile sort + search |
-| `src/ui/components/DataTable/ColumnDefinitions.tsx` | Tappable column meanings |
-| `src/ui/components/DataTable/index.tsx` | `mobileCards` props, card/table swap, `Col.mobilePriority` |
-| `src/ui/components/PlayMenu.tsx` | Bottom-bar Play, `drop="up"` below sm |
-| `src/ui/views/GlobalSettings/index.tsx` | "Text Size" setting |
-| `src/ui/index.tsx` | Cross-tab `fontScale` sync |
-| `src/common/types.ts` | `FontScale`, `window.getFontScale`/`applyFontScale` |
-| `tools/a11y/*` | Audit harness (`audit.ts`, `checks.ts`, `routes.ts`, `checkCss.ts`) |
+| File                                                | Role                                                                                              |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `MOBILE_FIRST_ACCESSIBILITY_PLAN.md`                | The spec: design targets, per-file inventory, phases, anti-goals                                  |
+| `public/css/_tokens.scss`                           | Token layer, root scale, reduced-motion, focus ring, form-control floors                          |
+| `public/css/light.scss`                             | `$font-size-base: 1rem`, heading/control sizing vars, chrome geometry, all the de-hardcoded rules |
+| `public/css/dark.scss`                              | Contrast: `$min-contrast-ratio`, `$body-secondary-color`                                          |
+| `public/css/datatable.scss`                         | Card-mode + column-definition CSS; search box now full-width on mobile                            |
+| `public/css/sidebar.scss`                           | Drawer sizing, 48px nav links, wrapping labels                                                    |
+| `public/index.html`                                 | Pre-paint `getFontScale`/`applyFontScale`; body padding moved to CSS                              |
+| `src/ui/hooks/useBreakpoint.ts`                     | `useBreakpointUp`/`useBreakpointDown`                                                             |
+| `src/ui/components/DataTable/MobileCards.tsx`       | Card layout                                                                                       |
+| `src/ui/components/DataTable/MobileControls.tsx`    | Mobile sort + search                                                                              |
+| `src/ui/components/DataTable/ColumnDefinitions.tsx` | Tappable column meanings                                                                          |
+| `src/ui/components/DataTable/index.tsx`             | `mobileCards` props, card/table swap, `Col.mobilePriority`                                        |
+| `src/ui/components/PlayMenu.tsx`                    | Bottom-bar Play, `drop="up"` below sm                                                             |
+| `src/ui/views/GlobalSettings/index.tsx`             | "Text Size" setting                                                                               |
+| `src/ui/index.tsx`                                  | Cross-tab `fontScale` sync                                                                        |
+| `src/common/types.ts`                               | `FontScale`, `window.getFontScale`/`applyFontScale`                                               |
+| `tools/a11y/*`                                      | Audit harness (`audit.ts`, `checks.ts`, `routes.ts`, `checkCss.ts`)                               |
 
 ### Pre-existing condition worth knowing
 

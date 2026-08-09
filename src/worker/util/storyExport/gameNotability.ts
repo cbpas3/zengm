@@ -35,10 +35,12 @@ export type BoxTeamLine = {
 	players: BoxPlayerLine[];
 };
 
+// `playoffs` is optional on the stored Game (it is only written for postseason games), which is
+// exactly why the v1 index lost the flag entirely - see gameIndex.ts.
 export type BoxGame = {
 	gid: number;
 	season: number;
-	playoffs: boolean;
+	playoffs?: boolean;
 	finals?: boolean;
 	overtimes: number;
 	teams: [BoxTeamLine, BoxTeamLine];
@@ -151,7 +153,7 @@ export const computeGameNotability = (
 	const notable =
 		notability >= STORY_NOTABILITY.NOTABLE_CUTOFF ||
 		maxGameScore >= STORY_NOTABILITY.ELITE_GAME_SCORE ||
-		game.playoffs ||
+		!!game.playoffs ||
 		!!game.finals ||
 		hasFeat;
 

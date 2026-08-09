@@ -36,9 +36,19 @@ const rawTeam = (): RawTeam => ({
 	name: "Aces",
 	did: 0,
 	seasons: [
-		{ tid: 0, season: 2015, won: 60, lost: 22, tied: 0, otl: 0, playoffRoundsWon: 4 },
+		{
+			tid: 0,
+			season: 2015,
+			won: 60,
+			lost: 22,
+			tied: 0,
+			otl: 0,
+			playoffRoundsWon: 4,
+		},
 	],
-	stats: [{ tid: 0, season: 2015, playoffs: false, gp: 82, pts: 9000, oppPts: 8500 }],
+	stats: [
+		{ tid: 0, season: 2015, playoffs: false, gp: 82, pts: 9000, oppPts: 8500 },
+	],
 });
 
 const gameIndexRow = (gid: number): GameIndexRow => ({
@@ -46,14 +56,20 @@ const gameIndexRow = (gid: number): GameIndexRow => ({
 	season: 2015,
 	playoffs: false,
 	finals: false,
+	round: null,
+	seriesId: null,
+	seriesGameNumber: null,
 	tids: [0, 1],
+	scores: [104, 96],
 	winnerTid: 0,
 	loserTid: 1,
 	margin: 8,
+	overtimes: 0,
 	pids: [1, 2],
 	topScorerPid: 1,
 	notability: 20,
 	notable: gid === 2,
+	boxScoreIncluded: gid === 2,
 	notablePids: [],
 });
 
@@ -102,9 +118,13 @@ describe("serializeBundle", () => {
 			"meta.json",
 			"players.json",
 			"teams.json",
+			"league.json",
 			"rankings.json",
 			"dynasties.json",
 			"rivalries.json",
+			"playoffSeries.json",
+			"awards.json",
+			"leaderboards.json",
 			"gameIndex.json",
 			"README.md",
 			"canon-workflow.md",
@@ -112,6 +132,9 @@ describe("serializeBundle", () => {
 		]) {
 			assert.include(paths, required);
 		}
+		// meta.files is the bundle's own manifest, so the docs can't promise what isn't here.
+		const meta = JSON.parse(files.find((f) => f.path === "meta.json")!.content);
+		assert.deepEqual([...meta.files].sort(), [...paths].sort());
 		// JSON files parse.
 		for (const f of files.filter((f) => f.path.endsWith(".json"))) {
 			assert.doesNotThrow(() => JSON.parse(f.content));
@@ -139,9 +162,27 @@ describe("serializeBundle", () => {
 	});
 
 	test("README carries the ground-truth preamble and league facts", () => {
-		const readme = buildReadme(kb);
+		const files = serializeBundle(kb);
+		const readme = buildReadme(kb, kb.meta.files);
 		assert.include(readme, "fictional");
 		assert.include(readme, "Test League");
 		assert.include(readme, "pull_games.py");
+		// The contents list is generated from the manifest: nothing it names may be absent, and
+		// nothing present may go unmentioned. v1's README documented three files that weren't there.
+		assert.notInclude(readme, "notableGames.json");
+		assert.notInclude(readme, "season-<year>.ndjson");
+		for (const path of files.map((f) => f.path)) {
+			assert.include(readme, path, `README should mention ${path}`);
+		}
+	});
+
+	test("the docs' promised files and evidence fields are validated against the bundle", () => {
+		serializeBundle(kb);
+		const missing = kb.meta.validation.issues.filter(
+			(i) =>
+				i.check === "documented-file-missing" ||
+				i.check === "documented-field-missing",
+		);
+		assert.deepEqual(missing, []);
 	});
 });

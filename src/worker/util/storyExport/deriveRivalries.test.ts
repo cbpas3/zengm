@@ -56,13 +56,29 @@ describe("deriveRivalries", () => {
 			{
 				season: 2015,
 				regularSeason: {
-					"0.1": { won: 2, lost: 2, tied: 0, otl: 0, otw: 0, pts: 400, oppPts: 400 },
+					"0.1": {
+						won: 2,
+						lost: 2,
+						tied: 0,
+						otl: 0,
+						otw: 0,
+						pts: 400,
+						oppPts: 400,
+					},
 				},
 			},
 			{
 				season: 2016,
 				regularSeason: {
-					"0.1": { won: 1, lost: 1, tied: 0, otl: 0, otw: 0, pts: 200, oppPts: 200 },
+					"0.1": {
+						won: 1,
+						lost: 1,
+						tied: 0,
+						otl: 0,
+						otw: 0,
+						pts: 200,
+						oppPts: 200,
+					},
 				},
 			},
 		];

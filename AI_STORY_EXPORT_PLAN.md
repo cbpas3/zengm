@@ -1,8 +1,21 @@
 # AI Story Export — Design & Build Plan
 
-Status: **Phase 1 implemented, 2026-07-29.** See CLAUDE.md's "Feature 10: AI Story Export (Phase 1)"
-for the as-built summary and key files. Deviations from this doc worth knowing before reading it as
+Status: **Phase 1 implemented 2026-07-29; schema v2 (correctness + enrichment pass) 2026-08-09.**
+See CLAUDE.md's "Feature 10: AI Story Export (Phase 1, v2 schema)" for the as-built summary, the
+full v1 bug-report table, and key files. Deviations from this doc worth knowing before reading it as
 ground truth:
+
+- **The v1 bundle was used to write real articles against an 80-season league and produced a
+  detailed bug report.** Everything below §1 still describes the intended architecture correctly,
+  but the _field-level_ specifics are superseded by the v2 schema: `meta.version` is now `2`, six
+  new tables ship (`playoffSeries.json`, `awards.json`, `leaderboards.json`, `league.json`, plus
+  `meta.dataCoverage` and `meta.validation`), every projected field is `T | null` rather than
+  possibly-undefined, derived stats (`ws = ows + dws`, `trb = trb + orb + drb`) go through
+  `statFields.ts`, and the README is generated from the bundle's own file manifest instead of being
+  written by hand. The report's headline finding is worth internalising before touching this code:
+  **it read display stat names off storage records**, and `undefined ?? 0` produced fields that were
+  present, numeric, and uniformly wrong — including `ws`, on which the entire greatest-players and
+  busts/steals canon depended.
 
 - **Delivery is a single navigable JSON** (a virtual-filesystem object keyed by path via
   `bundleToVirtualFs`), not a multi-file zip — the repo has no zip dependency, and one file is
@@ -69,7 +82,12 @@ upstream-merge risk, no staleness):
 - `players[].transactions[]` — every draft/trade/FA move (`type`, `fromTid`, `tid`, `season`,
   `phase`, `eid`). The career-movement timeline ("left, won elsewhere, came back") is prebuilt.
 - `players[].stats[]` per season, tagged with `tid` + `playoffs`, incl. advanced stats
-  (`per`, `ws`, `vorp`, `bpm`, `ortg`, `usgp`) and per-season game highs (`ptsMax`, …).
+  (`per`, `ows`/`dws`, `vorp`, `obpm`/`dbpm`, `ortg`, `usgp`) and per-season game highs
+  (`ptsMax`, …). **Careful:** this claim originally read "`ws` … `bpm`", and it is wrong — those are
+  _display_ names assembled at read time by `common/processPlayerStats.basketball.ts`
+  (`ws = ows + dws`, `bpm = obpm + dbpm`), not stored columns. So is `trb`, which modern rows
+  express as `orb` + `drb`. Believing the original line is what produced the v1 export's
+  all-zero win-share columns; `statFields.ts` now owns these rules.
 - `players[].ratings[]` per season (full trajectory); `hof`, `retiredYear`, `diedYear`,
   `relatives[]`, `draft` (pick/round/year/`originalTid`), `value`, `college`, `born`, `statsTids[]`.
 - `headToHeads` — pairwise franchise W/L for **both** regular season and playoffs, already

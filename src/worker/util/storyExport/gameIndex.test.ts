@@ -2,7 +2,10 @@ import { assert, describe, test } from "vitest";
 import { buildGameIndex, buildGameIndexRow } from "./gameIndex.ts";
 import type { BoxGame, BoxPlayerLine } from "./gameNotability.ts";
 
-const line = (pid: number, overrides: Partial<BoxPlayerLine> = {}): BoxPlayerLine => ({
+const line = (
+	pid: number,
+	overrides: Partial<BoxPlayerLine> = {},
+): BoxPlayerLine => ({
 	pid,
 	min: 30,
 	pts: 10,
@@ -57,7 +60,10 @@ describe("buildGameIndex", () => {
 			game(2),
 		];
 		const { index, notableGids } = buildGameIndex(games, new Set([3]));
-		assert.deepEqual(index.map((r) => r.gid), [1, 2, 3]);
+		assert.deepEqual(
+			index.map((r) => r.gid),
+			[1, 2, 3],
+		);
 		// gid 1 notable (playoff), gid 3 notable (feat), gid 2 not.
 		assert.include(notableGids, 1);
 		assert.include(notableGids, 3);
@@ -70,7 +76,17 @@ describe("buildGameIndex", () => {
 				{
 					tid: 0,
 					pts: 130,
-					players: [line(7, { pts: 50, fg: 18, fga: 28, ft: 10, fta: 11, drb: 8, ast: 6 })],
+					players: [
+						line(7, {
+							pts: 50,
+							fg: 18,
+							fga: 28,
+							ft: 10,
+							fta: 11,
+							drb: 8,
+							ast: 6,
+						}),
+					],
 				},
 				{ tid: 1, pts: 120, players: [line(8, { pts: 22 })] },
 			],

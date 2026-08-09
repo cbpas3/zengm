@@ -68,8 +68,16 @@ describe("computeGameNotability", () => {
 	test("a dull average blowout-adjacent game is not notable", () => {
 		const g = game({
 			teams: [
-				{ tid: 0, pts: 100, players: [line({ pid: 1, pts: 12, fg: 5, fga: 11 })] },
-				{ tid: 1, pts: 88, players: [line({ pid: 2, pts: 10, fg: 4, fga: 12 })] },
+				{
+					tid: 0,
+					pts: 100,
+					players: [line({ pid: 1, pts: 12, fg: 5, fga: 11 })],
+				},
+				{
+					tid: 1,
+					pts: 88,
+					players: [line({ pid: 2, pts: 10, fg: 4, fga: 12 })],
+				},
 			],
 		});
 		const n = computeGameNotability(g);
@@ -103,7 +111,9 @@ describe("computeGameNotability", () => {
 	test("playoff and finals games are always notable, and finals score higher", () => {
 		const reg = computeGameNotability(game({ playoffs: false }));
 		const playoff = computeGameNotability(game({ playoffs: true }));
-		const finals = computeGameNotability(game({ playoffs: true, finals: true }));
+		const finals = computeGameNotability(
+			game({ playoffs: true, finals: true }),
+		);
 		assert.isTrue(playoff.notable);
 		assert.isTrue(finals.notable);
 		assert.isAbove(finals.notability, playoff.notability);
@@ -119,7 +129,14 @@ describe("computeGameNotability", () => {
 	test("players who didn't play (min 0) are ignored", () => {
 		const g = game({
 			teams: [
-				{ tid: 0, pts: 100, players: [line({ pid: 1, pts: 30, min: 30 }), line({ pid: 9, pts: 0, min: 0 })] },
+				{
+					tid: 0,
+					pts: 100,
+					players: [
+						line({ pid: 1, pts: 30, min: 30 }),
+						line({ pid: 9, pts: 0, min: 0 }),
+					],
+				},
 				{ tid: 1, pts: 98, players: [line({ pid: 2, pts: 25, min: 25 })] },
 			],
 		});
@@ -130,18 +147,39 @@ describe("computeGameNotability", () => {
 
 	test("close games and overtime add notability over the same game decided comfortably", () => {
 		const comfortable = computeGameNotability(
-			game({ teams: [ { tid: 0, pts: 110, players: [line({ pid: 1, pts: 20 })] }, { tid: 1, pts: 96, players: [line({ pid: 2, pts: 18 })] } ] }),
+			game({
+				teams: [
+					{ tid: 0, pts: 110, players: [line({ pid: 1, pts: 20 })] },
+					{ tid: 1, pts: 96, players: [line({ pid: 2, pts: 18 })] },
+				],
+			}),
 		);
 		const nailbiter = computeGameNotability(
-			game({ overtimes: 1, teams: [ { tid: 0, pts: 110, players: [line({ pid: 1, pts: 20 })] }, { tid: 1, pts: 108, players: [line({ pid: 2, pts: 18 })] } ] }),
+			game({
+				overtimes: 1,
+				teams: [
+					{ tid: 0, pts: 110, players: [line({ pid: 1, pts: 20 })] },
+					{ tid: 1, pts: 108, players: [line({ pid: 2, pts: 18 })] },
+				],
+			}),
 		);
 		assert.isAbove(nailbiter.notability, comfortable.notability);
 	});
 
 	test("the player-notability threshold constant governs notablePids membership", () => {
-		const justUnder = line({ pid: 3, pts: STORY_NOTABILITY.PLAYER_GAME_SCORE - 5, fg: 4, fga: 8 });
+		const justUnder = line({
+			pid: 3,
+			pts: STORY_NOTABILITY.PLAYER_GAME_SCORE - 5,
+			fg: 4,
+			fga: 8,
+		});
 		const n = computeGameNotability(
-			game({ teams: [ { tid: 0, pts: 90, players: [justUnder] }, { tid: 1, pts: 88, players: [line({ pid: 2, pts: 10 })] } ] }),
+			game({
+				teams: [
+					{ tid: 0, pts: 90, players: [justUnder] },
+					{ tid: 1, pts: 88, players: [line({ pid: 2, pts: 10 })] },
+				],
+			}),
 		);
 		assert.notInclude(n.notablePids, 3);
 	});
